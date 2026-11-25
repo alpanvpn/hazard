@@ -1,0 +1,6 @@
+{
+  "name": "Alpan Siren 7007",
+  "description": "Электронный пульт спецсигналов в стиле Hazard 7007 с работой поверх фоновой музыки.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
