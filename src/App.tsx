@@ -176,7 +176,7 @@ export default function App() {
   const [toneVal, setToneVal] = useState(4800);
 
   const [manSiren, setManSiren] = useState<ManSirenBehavior>(() =>
-    storage.get('alpan_man_siren') === 'hold' ? 'hold' : 'toggle'
+    storage.get('alpan_man_mode') === 'toggle' ? 'toggle' : 'hold'
   );
   const [manStyle, setManStyle] = useState<ManStandbyStyle>(() =>
     storage.get('alpan_man_style') === 'wolf' ? 'wolf' : 'siren'
@@ -192,7 +192,7 @@ export default function App() {
     return Number.isFinite(saved) && saved >= 0 && saved <= 36 ? saved : 18;
   });
   const [bgMusicMode, setBgMusicMode] = useState<'ambient' | 'playback'>(() =>
-    storage.get('alpan_session') === 'playback' ? 'playback' : 'ambient'
+    storage.get('alpan_session_v2') === 'ambient' ? 'ambient' : 'playback'
   );
 
   const [manPressed, setManPressed] = useState(false);
@@ -218,7 +218,7 @@ export default function App() {
     loadedCount: 0,
     totalCount: 6,
     audioState: 'uninitialized',
-    sessionType: 'ambient',
+    sessionType: 'playback',
     micOn: false,
     radioName: null,
     activePhrase: null,
@@ -641,15 +641,15 @@ export default function App() {
     if (altTargetMode) {
       return manSiren === 'toggle'
         ? `Смена: ${MODE_LABELS[altTargetMode]}`
-        : `Удерж.: ${MODE_LABELS[altTargetMode]}`;
+        : `Держи: ${MODE_LABELS[altTargetMode]}`;
     }
     if (engineSnap.mode === 'pa') {
       return 'Разгон и трель';
     }
     if (engineSnap.mode === 'standby' || engineSnap.mode === 'radio') {
-      return manStyle === 'wolf' ? '«Волк»' : 'Удержание / смена';
+      return manStyle === 'wolf' ? '«Волк» (держи)' : 'Держи для звука';
     }
-    return 'Удержание / смена';
+    return manSiren === 'toggle' ? 'Переключает' : 'Держи для звука';
   }, [altTargetMode, engineSnap.mode, manSiren, manStyle]);
 
   const manIsLit = manPressed || (engineSnap.powered && (engineSnap.altActive || engineSnap.wolfActive));
@@ -797,27 +797,46 @@ export default function App() {
                   </span>
                 </div>
 
-                {/* Knurled Rotary Knobs */}
-                <div className="flex justify-around items-start mb-4">
+                {/* Knurled Rotary Knobs (both circular) */}
+                <div className="flex justify-around items-start mb-3">
                   <RotaryKnob
                     label="Громкость"
                     displayValue={`${Math.round(volume * 100)}%`}
-                    hint="Тяни вверх / вниз"
+                    hint="Тяни по кругу"
                     value={volume}
-                    dragMode="vertical"
                     onChange={handleVolumeChange}
                     ariaLabel="Регулятор громкости сирены"
                   />
                   <RotaryKnob
                     label="Режим"
                     displayValue={MODE_LABELS[engineSnap.mode]}
-                    hint="Коснись или поверни"
+                    hint="Поверни или нажми"
                     value={knobModeValue}
                     steps={KNOB_MODES.length - 1}
-                    dragMode="circular"
+                    onTapStep={() => {
+                      const nextIdx = (Math.max(0, knobModeIndex) + 1) % KNOB_MODES.length;
+                      void handleSelectMode(KNOB_MODES[nextIdx]);
+                    }}
                     onChange={handleModeKnobChange}
                     ariaLabel="Поворотный переключатель режимов"
                   />
+                </div>
+
+                {/* Convenient Horizontal Volume Slider */}
+                <div className="mb-3.5 px-2.5 py-2 rounded-xl bg-black/35 border border-white/10 flex items-center gap-2.5">
+                  <Volume2 className="w-4 h-4 text-[var(--acc)] shrink-0" aria-hidden="true" />
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round(volume * 100)}
+                    aria-label="Ползунок громкости"
+                    onChange={(e) => handleVolumeChange(Number(e.target.value) / 100)}
+                    className="w-full accent-[var(--acc)] cursor-pointer"
+                  />
+                  <span className="mono-nums text-[11px] font-bold text-white/85 w-9 text-right shrink-0">
+                    {Math.round(volume * 100)}%
+                  </span>
                 </div>
 
                 {/* 6 Primary Hazard 7007 Mode Keys */}
@@ -1339,25 +1358,8 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => {
-                    setBgMusicMode('ambient');
-                    storage.set('alpan_session', 'ambient');
-                    engineRef.current?.setSessionType('ambient');
-                    triggerHaptic(8);
-                  }}
-                  className={`siren-btn py-2.5 px-3 text-xs leading-tight ${
-                    bgMusicMode === 'ambient' ? 'active' : ''
-                  }`}
-                >
-                  <span className="block font-bold">Поверх музыки</span>
-                  <span className="block text-[10px] font-normal text-white/75 mt-0.5">
-                    Не ставит трек на паузу
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
                     setBgMusicMode('playback');
-                    storage.set('alpan_session', 'playback');
+                    storage.set('alpan_session_v2', 'playback');
                     engineRef.current?.setSessionType('playback');
                     triggerHaptic(8);
                   }}
@@ -1367,14 +1369,31 @@ export default function App() {
                 >
                   <span className="block font-bold">Только сирена</span>
                   <span className="block text-[10px] font-normal text-white/75 mt-0.5">
-                    Глушит плеер, но громче
+                    Громко в Safari (без звука сбоку)
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBgMusicMode('ambient');
+                    storage.set('alpan_session_v2', 'ambient');
+                    engineRef.current?.setSessionType('ambient');
+                    triggerHaptic(8);
+                  }}
+                  className={`siren-btn py-2.5 px-3 text-xs leading-tight ${
+                    bgMusicMode === 'ambient' ? 'active' : ''
+                  }`}
+                >
+                  <span className="block font-bold">Поверх музыки</span>
+                  <span className="block text-[10px] font-normal text-white/75 mt-0.5">
+                    Снимите беззвучный сбоку iPhone
                   </span>
                 </button>
               </div>
               <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-[11px] text-white/75 space-y-1">
-                <p>1. На iPhone добавьте сайт на экран «Домой» — так музыка не обрывается.</p>
+                <p>1. Если в Safari на iPhone тишина — в режиме «Поверх музыки» проверьте рычажок звука сбоку на телефоне (или оставьте «Только сирена»).</p>
                 <p>2. Не нажимайте PA/PTT во время музыки: микрофон всегда ставит плеер на паузу.</p>
-                <p>3. Если трек встал на паузу — нажмите Play свайпом сверху, дальше пойдут вместе.</p>
+                <p>3. На iPhone добавьте сайт на экран «Домой» — так сирена звучит стабильнее.</p>
               </div>
               <p className="text-[11px] text-[var(--ok)] font-medium">
                 Записи Hazard 7007 загружены: {engineSnap.loadedCount} из {engineSnap.totalCount}
@@ -1393,21 +1412,8 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      setManSiren('toggle');
-                      storage.set('alpan_man_siren', 'toggle');
-                      engineRef.current?.setManSiren('toggle');
-                    }}
-                    className={`siren-btn py-2.5 px-3 text-xs ${
-                      manSiren === 'toggle' ? 'active' : ''
-                    }`}
-                  >
-                    Переключает тон
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
                       setManSiren('hold');
-                      storage.set('alpan_man_siren', 'hold');
+                      storage.set('alpan_man_mode', 'hold');
                       engineRef.current?.setManSiren('hold');
                     }}
                     className={`siren-btn py-2.5 px-3 text-xs ${
@@ -1415,6 +1421,19 @@ export default function App() {
                     }`}
                   >
                     Пока держишь
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManSiren('toggle');
+                      storage.set('alpan_man_mode', 'toggle');
+                      engineRef.current?.setManSiren('toggle');
+                    }}
+                    className={`siren-btn py-2.5 px-3 text-xs ${
+                      manSiren === 'toggle' ? 'active' : ''
+                    }`}
+                  >
+                    Переключает тон
                   </button>
                 </div>
               </div>
@@ -1625,29 +1644,50 @@ export default function App() {
         </div>
       )}
 
-      {/* Gate Modal: Telegram Bot */}
+      {/* Gate Modal: Telegram Bot (Алпан ВПН Бот) */}
       {gateOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-5 bg-black/65 backdrop-blur-2xl"
+          className="fixed inset-0 z-50 flex items-center justify-center p-5 bg-black/70 backdrop-blur-2xl"
           role="dialog"
           aria-modal="true"
           aria-labelledby="gate-title"
         >
           <div className="panel-surface w-full max-w-sm p-6 text-center">
+            <div className="mx-auto mb-3.5 w-14 h-14 rounded-full bg-gradient-to-b from-[#2AABEE] to-[#229ED9] flex items-center justify-center shadow-[0_8px_24px_rgba(42,171,238,0.45)] border border-white/25">
+              <svg
+                viewBox="0 0 24 24"
+                className="w-7 h-7 text-white -translate-x-[1px]"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M21.94 3.46a1.5 1.5 0 0 0-1.56-.25L2.64 10.36a1.25 1.25 0 0 0 .06 2.34l4.52 1.53 1.75 5.45a1 1 0 0 0 1.66.41l2.63-2.58 4.4 3.25a1.5 1.5 0 0 0 2.36-.9L22.3 4.82a1.5 1.5 0 0 0-.36-1.36Zm-4.08 4.15-7.43 6.72-.31 3.12-1.15-3.68 8.89-6.16Z" />
+              </svg>
+            </div>
             <h2 id="gate-title" className="text-xl font-extrabold text-white mb-2">
-              Сначала в бота
+              Алпан ВПН Бот
             </h2>
-            <p className="text-sm text-white/75 mb-4">
-              Чтобы пользоваться сайтом, перейди по ссылке в Telegram-бота и нажми Start.
+            <p className="text-sm text-white/80 mb-4 leading-relaxed">
+              Чтобы открыть пульт сирены, перейди в Telegram-бот{' '}
+              <strong className="text-white">«Алпан ВПН Бот»</strong>{' '}
+              <span className="text-[#56bfff] font-semibold">(@AlpanVPNrobot)</span> и нажми{' '}
+              <strong className="text-white">Start</strong>.
             </p>
             <a
               href={BOT_URL}
               target="_blank"
               rel="noopener noreferrer"
               onClick={handleBotClick}
-              className="block w-full py-3.5 px-4 rounded-xl font-bold text-white bg-gradient-to-b from-[#4d8dff] to-[#2467e8] border border-white/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_8px_24px_rgba(47,123,255,0.45)] no-underline"
+              className="flex items-center justify-center gap-2.5 w-full py-3.5 px-4 rounded-xl font-bold text-white bg-gradient-to-b from-[#2AABEE] to-[#1d8ec9] border border-white/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),0_8px_24px_rgba(42,171,238,0.45)] no-underline"
             >
-              Открыть бота
+              <svg
+                viewBox="0 0 24 24"
+                className="w-5 h-5 shrink-0"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M21.94 3.46a1.5 1.5 0 0 0-1.56-.25L2.64 10.36a1.25 1.25 0 0 0 .06 2.34l4.52 1.53 1.75 5.45a1 1 0 0 0 1.66.41l2.63-2.58 4.4 3.25a1.5 1.5 0 0 0 2.36-.9L22.3 4.82a1.5 1.5 0 0 0-.36-1.36Zm-4.08 4.15-7.43 6.72-.31 3.12-1.15-3.68 8.89-6.16Z" />
+              </svg>
+              <span>Открыть Алпан ВПН Бот</span>
             </a>
             <button
               type="button"

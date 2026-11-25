@@ -128,7 +128,7 @@ export class SirenAudioEngine {
   private mode: SirenMode = 'standby';
   private altActive = false;
   private manStyle: 'siren' | 'wolf' = 'siren';
-  private manSiren: 'toggle' | 'hold' = 'toggle';
+  private manSiren: 'toggle' | 'hold' = 'hold';
   private manHeld = false;
   private hornHeld = false;
   private pttHeld = false;
@@ -139,7 +139,7 @@ export class SirenAudioEngine {
   private tunnelLevel = 0;
   private toneFreq = 4800;
   private micDb = 18;
-  private sessionType: 'ambient' | 'playback' = 'ambient';
+  private sessionType: 'ambient' | 'playback' = 'playback';
 
   private currentHz = 0;
   private currentHorn = false;
@@ -148,6 +148,17 @@ export class SirenAudioEngine {
   private phraseBuffers = new Map<PhraseId, AudioBuffer>();
   private phraseSrc: AudioBufferSourceNode | null = null;
   private activePhrase: PhraseId | null = null;
+
+  private sampleCache: Array<{
+    name: string;
+    pcm: Float32Array;
+    loopStart: number;
+    track?: number[];
+    step?: number;
+    hz?: number;
+  }> = [];
+  private wolfCache: Float32Array | null = null;
+  private workletStatSeen = false;
 
   private onStateChange?: (snap: EngineSnapshot) => void;
 
@@ -164,6 +175,11 @@ export class SirenAudioEngine {
       }
       this.emit();
     };
+    const gestureUnlock = () => {
+      this.unlock();
+    };
+    window.addEventListener('touchstart', gestureUnlock, { capture: true, passive: true });
+    window.addEventListener('pointerdown', gestureUnlock, { capture: true, passive: true });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') tryResume();
     });
@@ -214,7 +230,7 @@ export class SirenAudioEngine {
     await Promise.all(
       urls.map(async (u) => {
         try {
-          await fetch(u, { cache: 'force-cache' });
+          await fetch(u);
         } catch {
           // Offline cache handles it
         }
@@ -242,20 +258,24 @@ export class SirenAudioEngine {
 
   public unlock(): void {
     try {
+      this.applyAudioSession(this.sessionType);
       if (!this.ctx) {
-        this.applyAudioSession(this.sessionType);
         const AC =
           window.AudioContext ||
           (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        this.ctx = new AC({ latencyHint: 'interactive' });
+        try {
+          this.ctx = new AC({ latencyHint: 'interactive' });
+        } catch {
+          this.ctx = new AC();
+        }
         this.buildGraph();
         this.ctx.onstatechange = () => this.emit();
       }
       if (this.ctx.state !== 'running') {
         this.ctx.resume().catch(() => {});
       }
-      // Tiny silent buffer inside gesture wakes iOS Web Audio output without stealing OS media focus
-      const b = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
+      // Tiny silent buffer inside gesture wakes iOS Web Audio output cleanly
+      const b = this.ctx.createBuffer(1, 1, this.ctx.sampleRate || 44100);
       const s = this.ctx.createBufferSource();
       s.buffer = b;
       s.connect(this.ctx.destination);
@@ -336,12 +356,74 @@ export class SirenAudioEngine {
     await this.startPromise;
   }
 
+  private async createScriptProcessorNode(ctx: AudioContext, inline?: InlineAssets): Promise<AudioNode | null> {
+    const win = window as unknown as { HazardSynth?: new (sr: number) => HazardSynthInstance };
+    if (!win.HazardSynth) {
+      if (inline?.workletCode) {
+        const s = document.createElement('script');
+        s.textContent = inline.workletCode;
+        document.head.appendChild(s);
+      } else {
+        await new Promise<void>((res, rej) => {
+          const s = document.createElement('script');
+          s.src = 'hazard-worklet.js';
+          s.onload = () => res();
+          s.onerror = () => rej(new Error('Failed to load hazard-worklet.js'));
+          document.head.appendChild(s);
+        });
+      }
+    }
+    if (!win.HazardSynth) return null;
+    const syn = new win.HazardSynth(ctx.sampleRate);
+    syn.onStat = (m) => this.handleStat(m);
+    // 0 inputs is critical on iOS/macOS WebKit so onaudioprocess always fires
+    const sp = ctx.createScriptProcessor(1024, 0, 1);
+    const blk = new Float32Array(128);
+    sp.onaudioprocess = (e) => {
+      const out = e.outputBuffer.getChannelData(0);
+      for (let i = 0; i < out.length; i += 128) {
+        syn.render(blk);
+        out.set(blk, i);
+      }
+    };
+    this.sendFn = (m) => syn.message(m);
+    return sp;
+  }
+
+  private replayCachedSamples() {
+    if (!this.sendFn) return;
+    for (const item of this.sampleCache) {
+      const copy = new Float32Array(item.pcm);
+      this.sendFn(
+        {
+          type: 'sample',
+          name: item.name,
+          pcm: copy,
+          loopStart: item.loopStart,
+          track: item.track,
+          step: item.step,
+          hz: item.hz,
+        },
+        [copy.buffer]
+      );
+    }
+    if (this.wolfCache) {
+      const wCopy = new Float32Array(this.wolfCache);
+      this.sendFn({ type: 'wolfData', pcm: wCopy }, [wCopy.buffer]);
+    }
+    this.sendFn({ type: 'source', id: this.recReady ? 'rec' : 'synth' });
+    this.pushState();
+  }
+
   private async initDSP(): Promise<void> {
     const ctx = this.ctx;
     if (!ctx || !this.toneFilter) return;
 
     const inline = getInlineAssets();
     let node: AudioNode | null = null;
+    let usingWorklet = false;
+    this.workletStatSeen = false;
+
     if (ctx.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
       let blobUrl: string | null = null;
       try {
@@ -356,11 +438,11 @@ export class SirenAudioEngine {
         const wn = new AudioWorkletNode(ctx, 'hazard-synth', {
           numberOfInputs: 0,
           numberOfOutputs: 1,
-          outputChannelCount: [1],
         });
         wn.port.onmessage = (e) => this.handleStat(e.data as SynthMessage);
         this.sendFn = (m, tr) => wn.port.postMessage(m, tr || []);
         node = wn;
+        usingWorklet = true;
       } catch {
         node = null;
       } finally {
@@ -369,37 +451,7 @@ export class SirenAudioEngine {
     }
 
     if (!node) {
-      const win = window as unknown as { HazardSynth?: new (sr: number) => HazardSynthInstance };
-      if (!win.HazardSynth) {
-        if (inline?.workletCode) {
-          const s = document.createElement('script');
-          s.textContent = inline.workletCode;
-          document.head.appendChild(s);
-        } else {
-          await new Promise<void>((res, rej) => {
-            const s = document.createElement('script');
-            s.src = 'hazard-worklet.js';
-            s.onload = () => res();
-            s.onerror = () => rej(new Error('Failed to load hazard-worklet.js'));
-            document.head.appendChild(s);
-          });
-        }
-      }
-      if (win.HazardSynth) {
-        const syn = new win.HazardSynth(ctx.sampleRate);
-        syn.onStat = (m) => this.handleStat(m);
-        const sp = ctx.createScriptProcessor(1024, 1, 1);
-        const blk = new Float32Array(128);
-        sp.onaudioprocess = (e) => {
-          const out = e.outputBuffer.getChannelData(0);
-          for (let i = 0; i < out.length; i += 128) {
-            syn.render(blk);
-            out.set(blk, i);
-          }
-        };
-        this.sendFn = (m) => syn.message(m);
-        node = sp;
-      }
+      node = await this.createScriptProcessorNode(ctx, inline);
     }
 
     if (node) {
@@ -410,7 +462,30 @@ export class SirenAudioEngine {
     await this.loadHazardSamples();
     this.ready = true;
     this.pushState();
+    if (ctx.state !== 'running') {
+      ctx.resume().catch(() => {});
+    }
     this.emit();
+
+    // Safari WebKit safety watchdog: if AudioWorklet didn't emit a heartbeat within 500ms, switch to ScriptProcessor
+    if (usingWorklet && typeof window !== 'undefined') {
+      window.setTimeout(async () => {
+        if (this.workletStatSeen || !this.ctx || !this.toneFilter) return;
+        try {
+          if (this.workletNode) {
+            this.workletNode.disconnect();
+          }
+          const sp = await this.createScriptProcessorNode(this.ctx, inline);
+          if (sp) {
+            sp.connect(this.toneFilter);
+            this.workletNode = sp;
+            this.replayCachedSamples();
+          }
+        } catch {
+          // Ignore fallback errors
+        }
+      }, 500);
+    }
   }
 
   private async loadHazardSamples(): Promise<void> {
@@ -419,10 +494,7 @@ export class SirenAudioEngine {
     try {
       const meta = inline?.meta
         ? inline.meta
-        : ((await (await fetch('sounds/meta.json', { cache: 'force-cache' })).json()) as Record<
-            string,
-            MetaEntry
-          >);
+        : ((await (await fetch('sounds/meta.json')).json()) as Record<string, MetaEntry>);
       const names = ['wail', 'yelp', 'phaser', 'horn', 'tone'] as const;
       let ok = 0;
 
@@ -433,24 +505,34 @@ export class SirenAudioEngine {
             if (inline?.wavBase64?.[name]) {
               ab = base64ToArrayBuffer(inline.wavBase64[name]);
             } else {
-              const res = await fetch(`sounds/${name}.wav`, { cache: 'force-cache' });
+              const res = await fetch(`sounds/${name}.wav`);
               if (!res.ok) return;
               ab = await res.arrayBuffer();
             }
             const decoded = await this.ctx!.decodeAudioData(ab.slice(0));
-            const pcm = new Float32Array(decoded.getChannelData(0));
+            const raw = decoded.getChannelData(0);
+            const pcmCache = new Float32Array(raw);
+            const pcmTransfer = new Float32Array(raw);
             const m = meta[name] || {};
+            this.sampleCache.push({
+              name,
+              pcm: pcmCache,
+              loopStart: m.loopStart || 0,
+              track: m.track,
+              step: m.trackStep,
+              hz: m.hz,
+            });
             this.sendFn?.(
               {
                 type: 'sample',
                 name,
-                pcm,
+                pcm: pcmTransfer,
                 loopStart: m.loopStart || 0,
                 track: m.track,
                 step: m.trackStep,
                 hz: m.hz,
               },
-              [pcm.buffer]
+              [pcmTransfer.buffer]
             );
             ok++;
             this.loadedCount++;
@@ -468,7 +550,9 @@ export class SirenAudioEngine {
       if (inline?.wavBase64?.wolf) {
         try {
           const decoded = await this.ctx.decodeAudioData(base64ToArrayBuffer(inline.wavBase64.wolf));
-          const pcm = new Float32Array(decoded.getChannelData(0));
+          const raw = decoded.getChannelData(0);
+          this.wolfCache = new Float32Array(raw);
+          const pcm = new Float32Array(raw);
           this.sendFn?.({ type: 'wolfData', pcm }, [pcm.buffer]);
           this.loadedCount++;
           this.emit();
@@ -476,12 +560,14 @@ export class SirenAudioEngine {
           // Ignore
         }
       } else {
-        fetch('sounds/wolf.wav', { cache: 'force-cache' })
+        fetch('sounds/wolf.wav')
           .then((r) => (r.ok ? r.arrayBuffer() : null))
           .then((ab) => (ab && this.ctx ? this.ctx.decodeAudioData(ab.slice(0)) : null))
           .then((decoded) => {
             if (!decoded) return;
-            const pcm = new Float32Array(decoded.getChannelData(0));
+            const raw = decoded.getChannelData(0);
+            this.wolfCache = new Float32Array(raw);
+            const pcm = new Float32Array(raw);
             this.sendFn?.({ type: 'wolfData', pcm }, [pcm.buffer]);
             this.loadedCount++;
             this.emit();
@@ -495,6 +581,7 @@ export class SirenAudioEngine {
 
   private handleStat(m: SynthMessage) {
     if (m.type !== 'stat') return;
+    this.workletStatSeen = true;
     const f = typeof m.f === 'number' ? m.f : 0;
     const horn = Boolean(m.horn);
     const wolf = Boolean(m.wolf);
@@ -807,7 +894,7 @@ export class SirenAudioEngine {
     if (inline?.phrasesBase64?.[id]) {
       ab = base64ToArrayBuffer(inline.phrasesBase64[id]);
     } else {
-      const res = await fetch(`sounds/phrases/${id}.mp3`, { cache: 'force-cache' });
+      const res = await fetch(`sounds/phrases/${id}.mp3`);
       if (!res.ok) return null;
       ab = await res.arrayBuffer();
     }

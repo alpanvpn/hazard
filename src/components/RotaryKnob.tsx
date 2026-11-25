@@ -6,7 +6,7 @@ interface RotaryKnobProps {
   hint: string;
   value: number; // 0..1
   steps?: number; // 0 = continuous, >0 = discrete steps
-  dragMode?: 'circular' | 'vertical';
+  onTapStep?: () => void;
   onChange: (nextVal: number) => void;
   ariaLabel: string;
 }
@@ -17,20 +17,18 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
   hint,
   value,
   steps = 0,
-  dragMode = 'circular',
+  onTapStep,
   onChange,
   ariaLabel,
 }) => {
   const dialRef = useRef<HTMLDivElement | null>(null);
   const activePointerId = useRef<number | null>(null);
-  const startYRef = useRef<number>(0);
-  const startValRef = useRef<number>(value);
   const movedRef = useRef<boolean>(false);
+  const startPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const lastSnappedRef = useRef<number>(value);
 
   const angle = value * 270 - 135;
 
-  // Radial scale ticks around -135..+135 deg
   const ticks = useMemo(() => {
     const count = steps > 0 ? steps + 1 : 17;
     return Array.from({ length: count }, (_, idx) => {
@@ -42,59 +40,55 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
     });
   }, [steps, value]);
 
-  const emitSnapped = (rawV: number) => {
-    let v = Math.max(0, Math.min(1, rawV));
+  const updateCircular = (clientX: number, clientY: number) => {
+    const el = dialRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    // Ignore tiny jitter right on top of the center pivot
+    if (Math.hypot(clientX - cx, clientY - cy) < 10) return;
+
+    let ang = (Math.atan2(clientY - cy, clientX - cx) * 180) / Math.PI + 90;
+    if (ang > 180) ang -= 360;
+    ang = Math.max(-135, Math.min(135, ang));
+    let v = (ang + 135) / 270;
     if (steps > 0) {
       v = Math.round(v * steps) / steps;
     }
+    v = Math.max(0, Math.min(1, v));
     if (Math.abs(v - lastSnappedRef.current) > 0.002) {
       lastSnappedRef.current = v;
       onChange(v);
     }
   };
 
-  const updateCircular = (clientX: number, clientY: number) => {
-    const el = dialRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    let ang =
-      (Math.atan2(clientY - (rect.top + rect.height / 2), clientX - (rect.left + rect.width / 2)) * 180) /
-        Math.PI +
-      90;
-    if (ang > 180) ang -= 360;
-    ang = Math.max(-135, Math.min(135, ang));
-    emitSnapped((ang + 135) / 270);
-  };
-
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     activePointerId.current = e.pointerId;
-    startYRef.current = e.clientY;
-    startValRef.current = value;
     movedRef.current = false;
+    startPosRef.current = { x: e.clientX, y: e.clientY };
     lastSnappedRef.current = value;
     e.currentTarget.setPointerCapture(e.pointerId);
-    if (dragMode === 'circular') {
+    if (!onTapStep) {
       updateCircular(e.clientX, e.clientY);
     }
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (activePointerId.current !== e.pointerId) return;
-    if (dragMode === 'vertical') {
-      const dy = startYRef.current - e.clientY;
-      if (Math.abs(dy) > 3) movedRef.current = true;
-      emitSnapped(startValRef.current + dy / 120);
-    } else {
+    if (Math.hypot(e.clientX - startPosRef.current.x, e.clientY - startPosRef.current.y) > 5) {
       movedRef.current = true;
+    }
+    if (movedRef.current || !onTapStep) {
       updateCircular(e.clientX, e.clientY);
     }
   };
 
   const onPointerEnd = (e: React.PointerEvent<HTMLDivElement>) => {
     if (activePointerId.current === e.pointerId) {
-      if (dragMode === 'vertical' && !movedRef.current) {
-        updateCircular(e.clientX, e.clientY);
+      if (!movedRef.current && onTapStep) {
+        onTapStep();
       }
       activePointerId.current = null;
     }
@@ -119,7 +113,6 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
       </span>
 
       <div className="dial-stage">
-        {/* Calibrated radial scale ticks */}
         <div className="dial-ticks" aria-hidden="true">
           {ticks.map((t, idx) => (
             <span
