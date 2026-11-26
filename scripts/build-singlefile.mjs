@@ -37,11 +37,15 @@ for (const id of phraseIds) {
   phrasesBase64[id] = mp3Buf.toString('base64');
 }
 
+const eagleBuf = fs.readFileSync(path.join(publicDir, 'assets', 'aistudio', 'image_a1953bb7.png'));
+const eagleStickerUri = `data:image/png;base64,${eagleBuf.toString('base64')}`;
+
 const inlinePayload = JSON.stringify({
   workletCode,
   meta: metaJson,
   wavBase64,
   phrasesBase64,
+  eagleStickerUri,
 }).replace(/<\/script>/gi, '<\\/script>');
 
 // Bundle React App into a single classic IIFE script (works both via https:// and offline file://)

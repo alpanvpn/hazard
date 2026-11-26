@@ -136,14 +136,14 @@ body.siren-active .bg-mesh::after {
    ============================================================ */
 .sgu-chassis {
   position: relative;
-  border-radius: 15px;
-  padding: 8px;
+  border-radius: 16px;
+  padding: 10px;
   background:
     radial-gradient(ellipse 80% 35% at 50% 0%, rgba(255, 255, 255, 0.055) 0%, transparent 65%),
     linear-gradient(170deg, #1b1e25 0%, #111318 55%, #0b0c10 100%);
   border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow:
-    0 20px 42px rgba(0, 0, 0, 0.85),
+    0 22px 46px rgba(0, 0, 0, 0.85),
     0 4px 12px rgba(0, 0, 0, 0.65),
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     inset 0 -3px 6px rgba(0, 0, 0, 0.8);
@@ -161,7 +161,7 @@ body.siren-active .bg-mesh::after {
   top: 50%;
   transform: translateY(-50%);
   width: 14px;
-  height: 54px;
+  height: 58px;
   background: linear-gradient(180deg, #1a1d23 0%, #0d0f13 100%);
   border: 1px solid rgba(255, 255, 255, 0.1);
   display: none;
@@ -183,7 +183,7 @@ body.siren-active .bg-mesh::after {
 }
 .sgu-ear-slot {
   width: 6px;
-  height: 22px;
+  height: 24px;
   border-radius: 3px;
   background: #040507;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.9);
@@ -194,7 +194,7 @@ body.siren-active .bg-mesh::after {
   position: relative;
   border-radius: 10px;
   border: 1.8px solid var(--sgu-line, #e9be18);
-  padding: 8px 8px 8px;
+  padding: 10px 10px 10px;
   background: rgba(8, 9, 13, 0.56);
   box-shadow:
     inset 0 0 0 1px rgba(0, 0, 0, 0.55),
@@ -207,7 +207,7 @@ body.siren-active .bg-mesh::after {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 3px 7px;
+  padding: 4px 8px;
   border: 1.5px solid var(--sgu-line, #e9be18);
   background: rgba(0, 0, 0, 0.55);
   line-height: 1.08;
@@ -215,7 +215,7 @@ body.siren-active .bg-mesh::after {
 }
 
 /* ============================================================
-   Enlarged, Aligned Fluted Rotary Knobs (OFF/VOL + MODE)
+   Large, Aligned Fluted Rotary Knobs (OFF/VOL + MODE)
    ============================================================ */
 .dial-stage {
   position: relative;
@@ -223,8 +223,8 @@ body.siren-active .bg-mesh::after {
   align-items: center;
   justify-content: center;
 }
-.dial-stage.dial-sm { width: 96px; height: 96px; }
-.dial-stage.dial-lg { width: 92px; height: 92px; }
+.dial-stage.dial-sm { width: 104px; height: 104px; }
+.dial-stage.dial-lg { width: 100px; height: 100px; }
 
 .dial-ticks {
   position: absolute;
@@ -240,7 +240,7 @@ body.siren-active .bg-mesh::after {
   height: 5px;
   margin-left: -1.25px;
   background: rgba(255, 255, 255, 0.24);
-  transform-origin: 50% 46px;
+  transform-origin: 50% 50px;
   border-radius: 1.5px;
 }
 .dial-tick.lit {
@@ -255,11 +255,11 @@ body.siren-active .bg-mesh::after {
   cursor: grab;
   background: #090a0d;
   box-shadow:
-    0 12px 22px rgba(0, 0, 0, 0.9),
+    0 12px 24px rgba(0, 0, 0, 0.9),
     0 3px 6px rgba(0, 0, 0, 0.7);
 }
-.dial.dial-sm { width: 76px; height: 76px; }
-.dial.dial-lg { width: 86px; height: 86px; }
+.dial.dial-sm { width: 82px; height: 82px; }
+.dial.dial-lg { width: 94px; height: 94px; }
 .dial:active { cursor: grabbing; }
 
 .dial-knurl {
@@ -280,7 +280,7 @@ body.siren-active .bg-mesh::after {
 
 .dial-cap {
   position: absolute;
-  inset: 6px;
+  inset: 7px;
   border-radius: 50%;
   background:
     radial-gradient(circle at 38% 28%, #2e333f 0%, #171a22 55%, #0c0d12 100%);
@@ -301,28 +301,28 @@ body.siren-active .bg-mesh::after {
 .dial-needle {
   position: absolute;
   left: 50%;
-  top: 8px;
-  width: 4.5px;
-  height: 13px;
-  margin-left: -2.25px;
+  top: 9px;
+  width: 5px;
+  height: 15px;
+  margin-left: -2.5px;
   border-radius: 2px;
   background: #ffffff;
   box-shadow: 0 0 7px rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
-/* Circular Horseshoe Mode Selector Arena (tightened height, zero dead margin) */
+/* Circular Horseshoe Mode Selector Arena (Larger Scale) */
 .sgu-mode-arena {
   position: relative;
   width: 100%;
-  max-width: 262px;
-  height: 152px;
+  max-width: 280px;
+  height: 174px;
   margin: 0 auto;
 }
 
 .arc-dot {
   position: absolute;
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   transform: translate(-50%, -50%);
   border: 1.5px solid color-mix(in srgb, var(--sgu-line, #e9be18) 70%, rgba(255, 255, 255, 0.3));
@@ -348,13 +348,13 @@ body.siren-active .bg-mesh::after {
   position: absolute;
   background: transparent;
   border: 0;
-  padding: 4px 5px;
-  min-height: 26px;
+  padding: 4px 6px;
+  min-height: 28px;
   border-radius: 6px;
   cursor: pointer;
-  color: rgba(244, 246, 249, 0.82);
+  color: rgba(244, 246, 249, 0.85);
   font-weight: 800;
-  font-size: 10.5px;
+  font-size: 11.5px;
   letter-spacing: 0.04em;
   line-height: 1;
   white-space: nowrap;
@@ -376,11 +376,11 @@ body.siren-active .bg-mesh::after {
 .hw-mic-socket {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   width: 100%;
-  min-height: 52px;
-  padding: 7px 9px;
-  border-radius: 8px;
+  min-height: 60px;
+  padding: 8px 10px;
+  border-radius: 9px;
   border: 1.5px solid #2b303a;
   background: linear-gradient(180deg, #0d0f13 0%, #07080b 100%);
   box-shadow: inset 0 3px 7px rgba(0, 0, 0, 0.9);
@@ -400,8 +400,8 @@ body.siren-active .bg-mesh::after {
     0 0 16px rgba(255, 59, 78, 0.45);
 }
 .rj45-port {
-  width: 32px;
-  height: 26px;
+  width: 36px;
+  height: 28px;
   border-radius: 4px;
   background: #040507;
   border: 1.5px solid #2d323c;
@@ -424,7 +424,7 @@ body.siren-active .bg-mesh::after {
   bottom: 2px;
   left: 50%;
   transform: translateX(-50%);
-  width: 14px;
+  width: 15px;
   height: 5px;
   border-radius: 1px;
   background: #171a21;
@@ -433,17 +433,17 @@ body.siren-active .bg-mesh::after {
 /* Iconic White Square Hardware Keys (MAN / HORN) Inside Stepped Accent Frame */
 .hw-keys-bezel {
   border: 1.5px solid var(--sgu-line, #e9be18);
-  border-radius: 8px;
-  padding: 5px 7px 6px;
+  border-radius: 9px;
+  padding: 6px 8px 7px;
   background: rgba(0, 0, 0, 0.34);
 }
 
 .hw-white-key {
   width: 100%;
-  height: 50px;
+  height: 60px;
   border-radius: 8px;
   border: 1.5px solid #d7dde8;
-  border-bottom: 4.5px solid #9aa4b5;
+  border-bottom: 5px solid #9aa4b5;
   background: linear-gradient(180deg, #ffffff 0%, #e7ecf4 70%, #d4dce8 100%);
   color: #11151d;
   font-weight: 800;
@@ -453,14 +453,14 @@ body.siren-active .bg-mesh::after {
   align-items: center;
   justify-content: center;
   box-shadow:
-    0 5px 12px rgba(0, 0, 0, 0.72),
+    0 6px 14px rgba(0, 0, 0, 0.72),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
   transition: transform 0.06s ease, border-bottom-width 0.06s ease, box-shadow 0.08s ease, background 0.1s ease;
   touch-action: manipulation;
 }
 .hw-white-key:active,
 .hw-white-key.pressed {
-  transform: translateY(2.5px);
+  transform: translateY(3px);
   border-bottom-width: 2px;
   box-shadow:
     0 2px 5px rgba(0, 0, 0, 0.8),
@@ -554,15 +554,15 @@ body.gated #app-shell {
 }
 
 @media (max-width: 390px) {
-  .sgu-chassis { padding: 7px; }
-  .sgu-inner-frame { padding: 7px 6px 7px; }
-  .dial-stage.dial-sm { width: 84px; height: 84px; }
-  .dial-stage.dial-lg { width: 80px; height: 80px; }
-  .dial.dial-sm { width: 68px; height: 68px; }
-  .dial.dial-lg { width: 76px; height: 76px; }
-  .dial-tick { transform-origin: 50% 40px; }
-  .sgu-mode-arena { height: 144px; }
-  .arc-mode-btn { font-size: 9.5px; padding: 3px 4px; }
-  .hw-white-key { height: 46px; }
+  .sgu-chassis { padding: 8px; }
+  .sgu-inner-frame { padding: 8px 7px 8px; }
+  .dial-stage.dial-sm { width: 90px; height: 90px; }
+  .dial-stage.dial-lg { width: 88px; height: 88px; }
+  .dial.dial-sm { width: 72px; height: 72px; }
+  .dial.dial-lg { width: 82px; height: 82px; }
+  .dial-tick { transform-origin: 50% 43px; }
+  .sgu-mode-arena { height: 158px; }
+  .arc-mode-btn { font-size: 10.5px; padding: 3px 4px; }
+  .hw-white-key { height: 54px; }
 }
 

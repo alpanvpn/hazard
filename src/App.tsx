@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { EngineSnapshot, PhraseId, SirenAudioEngine, SirenMode } from './audio/sirenEngine';
+import { DagestanEagleSticker } from './components/DagestanEagleSticker';
 import { LiveHzReadout, LiveLedBar } from './components/LevelTelemetry';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { BrandWatermark, RegionFlags, SITE_URL } from './components/RegionFlags';
@@ -769,15 +770,15 @@ export default function App() {
       <div className="bg-mesh" aria-hidden="true" />
       <div className={`flash-overlay ${lightMode}`} aria-hidden="true" />
 
-      {/* Main Compact Application Shell */}
+      {/* Main Application Shell */}
       <div
         id="app-shell"
         data-sgu={sguSystem}
-        className="relative z-10 min-h-dvh mx-auto w-full max-w-4xl px-2.5 sm:px-5 pt-[calc(env(safe-area-inset-top)+6px)] pb-[calc(72px+env(safe-area-inset-bottom))] lg:pb-6"
+        className="relative z-10 min-h-dvh mx-auto w-full max-w-5xl px-2.5 sm:px-5 pt-[calc(env(safe-area-inset-top)+8px)] pb-[calc(76px+env(safe-area-inset-bottom))] lg:pb-8"
       >
         {/* Top Bar */}
-        <header className="flex items-center justify-between gap-2 mb-1.5">
-          <h1 className="text-lg sm:text-xl font-extrabold tracking-tight text-white whitespace-nowrap shrink-0">
+        <header className="flex items-center justify-between gap-2 mb-2">
+          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white whitespace-nowrap shrink-0">
             {sguSpec.brandBottom} <span style={{ color: sguSpec.accentColor }}>{sguSpec.modelCode}</span>
           </h1>
 
@@ -816,18 +817,18 @@ export default function App() {
           </div>
         </header>
 
-        {/* Responsive Grid: 1 column on mobile, 2 columns on desktop */}
-        <div className="grid grid-cols-1 lg:grid-cols-[446px_1fr] gap-2.5 items-start">
+        {/* Responsive Grid: 1 column on mobile, 2 larger columns on desktop */}
+        <div className="grid grid-cols-1 lg:grid-cols-[490px_1fr] gap-3 items-start">
           {/* Primary Real SGU Console Unit */}
           <section
             aria-label="Пульт сирены"
             className={activeTab === 'siren' ? 'block' : 'hidden lg:block'}
           >
-            {/* Compact Status + Isolated Live LED Meter Bar */}
-            <div className="panel-surface px-3 py-1.5 mb-1.5 flex items-center justify-between gap-2">
+            {/* Status + Isolated Live LED Meter Bar */}
+            <div className="panel-surface px-3.5 py-2 mb-2 flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <p
-                  className={`text-[11px] font-bold tracking-wider truncate ${
+                  className={`text-xs font-bold tracking-wider truncate ${
                     engineSnap.powered ? 'text-[var(--ok)]' : 'text-[var(--dim)]'
                   }`}
                 >
@@ -835,7 +836,7 @@ export default function App() {
                 </p>
                 <div className="flex items-baseline gap-2">
                   <span
-                    className="text-lg sm:text-xl font-extrabold tracking-wide truncate"
+                    className="text-xl sm:text-2xl font-extrabold tracking-wide truncate"
                     style={{ color: sguSpec.accentColor }}
                   >
                     {displayStatus.title}
@@ -850,13 +851,13 @@ export default function App() {
                   volume={volume}
                   subscribe={subscribeTelemetry}
                 />
-                <span className="mono-nums text-[11px] font-bold text-white/85 block mt-0.5">
+                <span className="mono-nums text-xs font-bold text-white/85 block mt-0.5">
                   {engineSnap.powered ? `${Math.round(volume * 100)}%` : 'OFF'}
                 </span>
               </div>
             </div>
 
-            {/* Authentic Premier Hazard 7007 Hardware Console (Compact, Aligned Dials, Zero Dead Space) */}
+            {/* Authentic Premier Hazard 7007 Hardware Console (Larger Scale + Golden Dagestan Eagle Sticker Top-Right) */}
             <div className="sgu-chassis">
               <div className="sgu-ear sgu-ear-left" aria-hidden="true">
                 <span className="sgu-ear-slot" />
@@ -865,14 +866,17 @@ export default function App() {
                 <span className="sgu-ear-slot" />
               </div>
 
+              {/* Golden Dagestan Eagle Metallic Vinyl Sticker on Top-Right Corner */}
+              <DagestanEagleSticker className="absolute -top-2 -right-1.5 sm:-top-2.5 sm:-right-2 z-20 w-13 h-13 sm:w-16 sm:h-16 rotate-[8deg]" />
+
               <div className="sgu-inner-frame">
-                {/* Top Zone: Tightly Aligned Left OFF/VOL Knob & Right Circular Mode Dial Arena */}
-                <div className="grid grid-cols-[106px_1fr] sm:grid-cols-[118px_1fr] items-center gap-1">
-                  {/* Left: OFF/VOL label cleanly at top + Knob pixel-aligned horizontally with Right Knob */}
-                  <div className="relative h-[144px] sm:h-[152px] w-full">
-                    <div className="absolute top-0.5 left-0 right-0 flex items-center justify-center gap-1.5">
+                {/* Top Zone: Larger Aligned OFF/VOL Knob & Circular Mode Dial Arena */}
+                <div className="grid grid-cols-[114px_1fr] sm:grid-cols-[132px_1fr] items-center gap-1">
+                  {/* Left: OFF/VOL label cleanly at top + Larger Knob aligned horizontally with Right Knob */}
+                  <div className="relative h-[158px] sm:h-[174px] w-full">
+                    <div className="absolute top-1 left-0 right-0 flex items-center justify-center gap-1.5">
                       <span
-                        className={`w-2 h-2 rounded-full transition-colors ${
+                        className={`w-2.5 h-2.5 rounded-full transition-colors ${
                           engineSnap.powered
                             ? 'bg-[var(--sgu-line)] shadow-[0_0_8px_var(--sgu-line)]'
                             : 'bg-white/20'
@@ -880,19 +884,19 @@ export default function App() {
                         aria-hidden="true"
                       />
                       <span
-                        className="text-[10.5px] font-extrabold tracking-wider"
+                        className="text-[11px] sm:text-xs font-extrabold tracking-wider"
                         style={{ color: sguSpec.accentColor }}
                       >
                         OFF/VOL
                       </span>
-                      <span className="mono-nums text-[10px] font-bold text-white/85">
+                      <span className="mono-nums text-[10.5px] sm:text-[11px] font-bold text-white/85">
                         {engineSnap.powered ? `${Math.round(volume * 100)}%` : 'ВЫКЛ'}
                       </span>
                     </div>
 
                     <div
                       className="absolute -translate-x-1/2 -translate-y-1/2"
-                      style={{ left: '50%', top: '60%' }}
+                      style={{ left: '50%', top: '58%' }}
                     >
                       <RotaryKnob
                         size="sm"
@@ -904,11 +908,11 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Right: Mode Knob + Symmetrical Circular Horseshoe LED Dots & Labels */}
+                  {/* Right: Larger Mode Knob + Symmetrical Circular Horseshoe LED Dots & Labels */}
                   <div className="sgu-mode-arena">
                     <div
                       className="absolute -translate-x-1/2 -translate-y-1/2"
-                      style={{ left: '50%', top: '60%' }}
+                      style={{ left: '50%', top: '58%' }}
                     >
                       <RotaryKnob
                         size="lg"
@@ -931,10 +935,10 @@ export default function App() {
                       const cos = Math.cos(rad);
                       const sin = Math.sin(rad);
 
-                      const dotLeft = 50 + 24.5 * cos;
-                      const dotTop = 60 + 36.5 * sin;
-                      const lblLeft = 50 + 29.5 * cos;
-                      const lblTop = 60 + 45.5 * sin;
+                      const dotLeft = 50 + 25.0 * cos;
+                      const dotTop = 58 + 35.0 * sin;
+                      const lblLeft = 50 + 30.5 * cos;
+                      const lblTop = 58 + 44.0 * sin;
 
                       const isLeft = deg < -40;
                       const isTopLeft = deg === -25;
@@ -981,16 +985,16 @@ export default function App() {
                 </div>
 
                 {/* Middle Brand, Region Flags, Website Link & Model Strip */}
-                <div className="flex items-center justify-between gap-2 py-1.5 mt-1 border-t border-white/10">
+                <div className="flex items-center justify-between gap-2 py-2 mt-1 border-t border-white/10">
                   <div className="hazard-badge shrink-0">
                     <span
-                      className="text-[8px] font-extrabold tracking-[0.18em]"
+                      className="text-[8.5px] font-extrabold tracking-[0.18em]"
                       style={{ color: sguSpec.accentColor }}
                     >
                       {sguSpec.brandTop}
                     </span>
                     <span
-                      className="text-[11px] font-extrabold tracking-[0.12em]"
+                      className="text-xs font-extrabold tracking-[0.12em]"
                       style={{ color: sguSpec.accentColor }}
                     >
                       {sguSpec.brandBottom}
@@ -998,12 +1002,12 @@ export default function App() {
                   </div>
 
                   <div className="flex flex-col items-center justify-center min-w-0 px-1">
-                    <RegionFlags compact />
+                    <RegionFlags />
                     <a
                       href={SITE_URL}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mono-nums text-[10px] sm:text-[11px] font-extrabold leading-tight tracking-tight hover:underline no-underline truncate max-w-full mt-0.5"
+                      className="mono-nums text-[10.5px] sm:text-xs font-extrabold leading-tight tracking-tight hover:underline no-underline truncate max-w-full mt-0.5"
                       style={{ color: sguSpec.accentColor }}
                     >
                       {SITE_URL}
@@ -1011,7 +1015,7 @@ export default function App() {
                   </div>
 
                   <span
-                    className="text-lg sm:text-xl font-extrabold italic tracking-wide shrink-0"
+                    className="text-xl sm:text-2xl font-extrabold italic tracking-wide shrink-0"
                     style={{ color: sguSpec.accentColor }}
                   >
                     {sguSpec.modelCode}
@@ -1019,7 +1023,7 @@ export default function App() {
                 </div>
 
                 {/* Bottom Zone: Left RJ45 Mic Socket (PTT) + Right Yellow-Framed White Square Keys (MAN / HORN) */}
-                <div className="grid grid-cols-[1fr_1.18fr] gap-2 items-end pt-1.5">
+                <div className="grid grid-cols-[1fr_1.18fr] gap-2.5 items-end pt-2">
                   <button
                     type="button"
                     onPointerDown={(e) => void onPttDown(e)}
@@ -1041,22 +1045,22 @@ export default function App() {
                     </div>
                     <div className="text-left min-w-0">
                       <span
-                        className="block text-[11px] sm:text-xs font-extrabold tracking-wide leading-tight truncate"
+                        className="block text-xs sm:text-[13px] font-extrabold tracking-wide leading-tight truncate"
                         style={{ color: pttPressed ? '#fb7185' : sguSpec.accentColor }}
                       >
                         {sguSpec.pttLabel}
                       </span>
-                      <span className="block text-[10px] font-semibold text-white/65 leading-tight truncate">
+                      <span className="block text-[10.5px] font-semibold text-white/70 leading-tight truncate">
                         Держи · ГГС
                       </span>
                     </div>
                   </button>
 
                   <div className="hw-keys-bezel">
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <div className="flex flex-col items-center gap-0.5">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex flex-col items-center gap-1">
                         <span
-                          className="text-[10px] font-extrabold tracking-wider leading-none"
+                          className="text-[11px] font-extrabold tracking-wider leading-none"
                           style={{ color: sguSpec.accentColor }}
                         >
                           {sguSpec.manLabel}
@@ -1073,15 +1077,15 @@ export default function App() {
                             manPressed ? 'pressed' : ''
                           }`}
                         >
-                          <span className="text-[11px] font-extrabold tracking-wide opacity-80">
+                          <span className="text-xs font-extrabold tracking-wide opacity-85">
                             {sguSpec.manLabel}
                           </span>
                         </button>
                       </div>
 
-                      <div className="flex flex-col items-center gap-0.5">
+                      <div className="flex flex-col items-center gap-1">
                         <span
-                          className="text-[10px] font-extrabold tracking-wider leading-none"
+                          className="text-[11px] font-extrabold tracking-wider leading-none"
                           style={{ color: sguSpec.accentColor }}
                         >
                           {sguSpec.hornLabel}
@@ -1098,7 +1102,7 @@ export default function App() {
                             hornPressed ? 'pressed' : ''
                           }`}
                         >
-                          <span className="text-[11px] font-extrabold tracking-wide opacity-80">
+                          <span className="text-xs font-extrabold tracking-wide opacity-85">
                             {sguSpec.hornLabel}
                           </span>
                         </button>
@@ -1110,28 +1114,28 @@ export default function App() {
             </div>
 
             {micStatusMsg && (
-              <p className="mt-1 text-xs text-amber-300 font-semibold px-1">{micStatusMsg}</p>
+              <p className="mt-1.5 text-xs text-amber-300 font-semibold px-1">{micStatusMsg}</p>
             )}
 
             {/* Full-Width Emergency Cutoff Button Positioned Directly Between SGU Unit & DPS Voice Card */}
             <button
               type="button"
               onClick={handleStopAll}
-              className="siren-btn stop-switch w-full mt-2 min-h-[44px] px-4 py-2 text-xs sm:text-sm font-extrabold tracking-widest flex items-center justify-center gap-2"
+              className="siren-btn stop-switch w-full mt-2.5 min-h-[48px] px-4 py-2.5 text-sm font-extrabold tracking-widest flex items-center justify-center gap-2"
             >
               <span className="w-2.5 h-2.5 rounded-full bg-rose-400 shadow-[0_0_8px_#fb7185]" aria-hidden="true" />
               <span>СТОП ВСЁ</span>
             </button>
 
             {/* Clean 3x2 Grid of All 6 Officer Megaphone Phrases */}
-            <div className="panel-surface mt-2 p-2.5 space-y-1.5">
+            <div className="panel-surface mt-2.5 p-3 space-y-2">
               <div className="flex items-center justify-between px-0.5">
-                <span className="text-xs font-extrabold tracking-wide text-[var(--acc)] flex items-center gap-1.5">
+                <span className="text-xs sm:text-[13px] font-extrabold tracking-wide text-[var(--acc)] flex items-center gap-1.5">
                   <Megaphone className="w-4 h-4" aria-hidden="true" />
                   <span>Голос ДПС (поверх сирены)</span>
                 </span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {DPS_PHRASES.map((phrase) => {
                   const active = engineSnap.activePhrase === phrase.id;
                   return (
@@ -1144,7 +1148,7 @@ export default function App() {
                       }}
                       aria-label={phrase.full}
                       aria-pressed={active}
-                      className={`siren-btn min-h-[42px] px-2 py-1.5 text-xs sm:text-[13px] whitespace-nowrap truncate ${
+                      className={`siren-btn min-h-[46px] px-2.5 py-2 text-[13px] whitespace-nowrap truncate ${
                         active ? 'horn-active' : ''
                       }`}
                     >
@@ -1157,7 +1161,7 @@ export default function App() {
           </section>
 
           {/* Right Column on Desktop / Tab Content on Mobile */}
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {/* СГУ System Selector Section (Default: Premier Hazard 7007 -> Switchable to ГРАЧ, ЭЛИНА, БАРС!) */}
             <section
               aria-label="Выбор системы СГУ"
