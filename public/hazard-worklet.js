@@ -5,17 +5,22 @@
     wail:   { lo: 1120, hi: 1770, up: 2.40,  down: 2.20,  smooth: 0.07,   a: 1097.5, b: 1791.9 },
     yelp:   { lo: 520,  hi: 1775, up: 0.160, down: 0.170, smooth: 0.004,  a: 486.7,  b: 1808.9 },
     phaser: { lo: 720,  hi: 1745, up: 0.022, down: 0.028, smooth: 0.0012, a: 664.5,  b: 1804.5 },
-    hilo:   { hi: 1100, lo: 670,  half: 0.545, smooth: 0.002 },
+    hilo:   { hi: 1095, lo: 665,  half: 0.545, smooth: 0.003 },
     fast:   { lo: 920,  hi: 1770, up: 1.10,  down: 1.00,  smooth: 0.04,   a: 900,    b: 1790 },
     piercer:{ lo: 680,  hi: 1780, up: 0.095, down: 0.018, smooth: 0.0015, a: 660,    b: 1800 },
     airraid:{ lo: 310,  hi: 780,  up: 4.50,  down: 5.50,  smooth: 0.14,   a: 300,    b: 790 },
     rumbler:{ lo: 250,  hi: 660,  up: 0.14,  down: 0.14,  smooth: 0.006,  a: 240,    b: 675 },
+    grach:  { lo: 580,  hi: 1480, up: 0.205, down: 0.185, smooth: 0.004,  a: 555,    b: 1510 },
+    elina:  { lo: 540,  hi: 1590, up: 0.86,  down: 0.78,  smooth: 0.014,  a: 520,    b: 1620 },
+    smerch: { lo: 650,  hi: 1760, up: 0.034, down: 0.025, smooth: 0.0014, a: 625,    b: 1790 },
+    bars:   { hi: 960,  lo: 495,  half: 0.355, smooth: 0.0025 },
+    patriot:{ lo: 280,  hi: 730,  up: 0.138, down: 0.138, smooth: 0.0055, a: 268,    b: 745 },
   };
 
-  const HORN = { lo: 600, hi: 1650, rate: 54.4, rise: 0.3 };
-  const MAN = { start: 420, max: 1480, rise: 4800, tau: 0.8, cut: 300, spin: 1430, burst: 1000 };
+  const HORN = { lo: 580, hi: 1620, rate: 54.4, rise: 0.3 };
+  const MAN = { start: 410, max: 1480, rise: 4800, tau: 0.78, cut: 290, spin: 1430, burst: 1000 };
 
-  // T: 0=OFF, 1=WAIL, 2=YELP, 3=HILO, 4=PHASER, 5=FAST, 6=PIERCER, 7=RUMBLER, 8=AIRRAID, 9=USA
+  // T: 0=OFF, 1=WAIL, 2=YELP, 3=HILO, 4=PHASER, 5=FAST, 6=PIERCER, 7=RUMBLER, 8=AIRRAID, 9=MEGA/USA, 10=GRACH, 11=ELINA, 12=SMERCH, 13=BARS, 14=PATRIOT
   const TONE_PAT = {
     1: 'wail',
     2: 'yelp',
@@ -25,10 +30,16 @@
     6: 'piercer',
     7: 'rumbler',
     8: 'airraid',
+    10: 'grach',
+    11: 'elina',
+    12: 'smerch',
+    13: 'bars',
+    14: 'patriot',
   };
 
   const LOOPS = ['wail', 'yelp', 'phaser'];
-  const TIMBRE = [1, 0.02, 0.035, 0, 0.01];
+  // Brassy SGU compression-horn harmonic spectrum
+  const TIMBRE = [1.0, 0.16, 0.34, 0.09, 0.19, 0.05, 0.11, 0.03];
   const TBL = 2048;
 
   function table(h) {
@@ -62,7 +73,7 @@
       this.s = { power: false, tone: 0, man: 'off', manHeld: false, horn: false, mute: false };
       this.source = 'rec';
       this.tbl = table(TIMBRE);
-      this.hornTbl = table([1, 0.02, 0.05]);
+      this.hornTbl = table([1.0, 0.18, 0.36, 0.12, 0.22, 0.08]);
       this.rec = {};
 
       this.ph = 0; this.f = 0; this.tf = 0; this.f1 = 0; this.dir = 1;
@@ -160,7 +171,7 @@
       const p = PAT[name];
       this.pat = p;
       this.patName = name;
-      if (name === 'hilo') {
+      if (name === 'hilo' || name === 'bars') {
         this.hiloT = 0;
         this.tf = p.hi;
         if (fromSilence) this.f = this.f1 = p.hi;
@@ -185,8 +196,8 @@
       if (s.tone) {
         let name = TONE_PAT[s.tone];
         if (s.tone === 9) {
-          this.usaT = (this.usaT + blockDur) % 10.0;
-          name = this.usaT < 4.0 ? 'wail' : this.usaT < 7.5 ? 'yelp' : 'phaser';
+          this.usaT = (this.usaT + blockDur) % 10.5;
+          name = this.usaT < 3.5 ? 'wail' : this.usaT < 6.0 ? 'yelp' : this.usaT < 8.3 ? 'grach' : 'phaser';
         }
         if (this.mode !== 'pat' || this.patName !== name) {
           this.enterPat(name, silent || this.mode === 'idle');
@@ -265,17 +276,18 @@
             this.f = this.trackF(loopName, V[loopName].pos);
           } else {
             const p = this.pat;
-            if (this.patName === 'hilo') {
+            if (this.patName === 'hilo' || this.patName === 'bars') {
               this.hiloT += dt;
               if (this.hiloT >= p.half) {
                 this.hiloT -= p.half;
                 this.tf = this.tf === p.hi ? p.lo : p.hi;
               }
             } else if (this.dir > 0) {
-              this.tf += ((p.b - p.a) / p.up) * dt;
+              // Logarithmic pitch curve matches real analog/digital SGU sirens
+              this.tf *= Math.pow(p.b / p.a, dt / p.up);
               if (this.tf >= p.b) { this.tf = p.b; this.dir = -1; }
             } else {
-              this.tf -= ((p.b - p.a) / p.down) * dt;
+              this.tf /= Math.pow(p.b / p.a, dt / p.down);
               if (this.tf <= p.a) { this.tf = p.a; this.dir = 1; }
             }
             this.f1 += (this.tf - this.f1) * ks;
@@ -312,7 +324,14 @@
           const tt = toneOn ? 1 : 0;
           if (toneV.g !== tt) toneV.g = tt > toneV.g ? Math.min(tt, toneV.g + this.kX) : Math.max(tt, toneV.g - this.kX);
           if (toneV.g > 0) {
-            y += read(tone.pcm, toneV.pos) * eq(toneV.g);
+            const rawTone = read(tone.pcm, toneV.pos);
+            // Add subtle horn driver grit to pitched tone.wav so Russian SGU & HI-LO punch like real under-hood speakers
+            this.ph += this.f * dt;
+            this.ph -= Math.floor(this.ph);
+            const sx = this.ph * TBL, sj = sx | 0, sfr = sx - sj;
+            const hornHarm = tbl[sj] + (tbl[sj + 1] - tbl[sj]) * sfr;
+            const blended = rawTone * 0.72 + hornHarm * 0.28;
+            y += Math.tanh(blended * 1.28) * 0.88 * eq(toneV.g);
             toneV.pos += this.f / tone.hz;
             while (toneV.pos >= tone.pcm.length) toneV.pos -= tone.pcm.length;
           }
@@ -321,7 +340,8 @@
           this.ph += this.f * dt;
           this.ph -= Math.floor(this.ph);
           const x = this.ph * TBL, j = x | 0, fr = x - j;
-          y = (tbl[j] + (tbl[j + 1] - tbl[j]) * fr) * this.amp * OUT_SYN;
+          const rawS = tbl[j] + (tbl[j + 1] - tbl[j]) * fr;
+          y = Math.tanh(rawS * 1.32) * 0.86 * this.amp * OUT_SYN;
         }
 
         this.hg += (hornT - this.hg) * (hornT > this.hg ? this.kHornOn : this.kHornOff);

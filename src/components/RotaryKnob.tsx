@@ -107,8 +107,8 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
 
   return (
     <div className="flex flex-col items-center text-center w-[47%] no-select">
-      <span className="dial-label text-[11px] font-bold tracking-[0.14em] uppercase">{label}</span>
-      <span className="mono-nums dial-readout text-xs font-extrabold mt-0.5 mb-2.5 tracking-wider">
+      <span className="dial-label text-[10px] font-bold tracking-[0.14em] uppercase">{label}</span>
+      <span className="mono-nums dial-readout text-[11px] font-extrabold mt-0.5 mb-2 tracking-wider">
         {displayValue}
       </span>
 
@@ -148,7 +148,7 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
         </div>
       </div>
 
-      <span className="mt-2 text-[11px] text-[var(--dim)]">{hint}</span>
+      <span className="mt-1.5 text-[10px] text-[var(--dim)]">{hint}</span>
     </div>
   );
 };

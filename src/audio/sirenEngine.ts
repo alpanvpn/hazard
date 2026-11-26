@@ -10,7 +10,13 @@ export type SirenMode =
   | 'rumbler'
   | 'usa'
   | 'airraid'
-  | 'fast';
+  | 'fast'
+  | 'grach'
+  | 'elina'
+  | 'smerch'
+  | 'bars'
+  | 'patriot'
+  | 'mega';
 
 // Numeric tone codes matching HazardSynth inside public/hazard-worklet.js
 const TONE_CODE: Record<SirenMode, number> = {
@@ -26,6 +32,12 @@ const TONE_CODE: Record<SirenMode, number> = {
   rumbler: 7,
   airraid: 8,
   usa: 9,
+  mega: 9,
+  grach: 10,
+  elina: 11,
+  smerch: 12,
+  bars: 13,
+  patriot: 14,
 };
 
 export type PhraseId =
@@ -294,6 +306,18 @@ export class SirenAudioEngine {
     this.toneFilter.frequency.value = this.toneFreq;
     this.toneFilter.Q.value = 0.7;
 
+    // Realistic under-hood SGU horn projection EQ
+    const hornHp = ctx.createBiquadFilter();
+    hornHp.type = 'highpass';
+    hornHp.frequency.value = 220;
+    hornHp.Q.value = 0.7;
+
+    const hornPresence = ctx.createBiquadFilter();
+    hornPresence.type = 'peaking';
+    hornPresence.frequency.value = 1480;
+    hornPresence.Q.value = 0.85;
+    hornPresence.gain.value = 3.2;
+
     this.dryGain = ctx.createGain();
     this.dryGain.gain.value = 1;
 
@@ -323,16 +347,19 @@ export class SirenAudioEngine {
     this.analyser.fftSize = 2048;
     this.analyser.smoothingTimeConstant = 0.3;
 
-    this.toneFilter.connect(this.dryGain);
+    this.toneFilter.connect(hornHp);
+    hornHp.connect(hornPresence);
+
+    hornPresence.connect(this.dryGain);
     this.dryGain.connect(this.masterGain);
 
-    this.toneFilter.connect(this.delayNode);
+    hornPresence.connect(this.delayNode);
     this.delayNode.connect(this.delayFeedback);
     this.delayFeedback.connect(this.delayNode);
     this.delayNode.connect(this.delayWet);
     this.delayWet.connect(this.masterGain);
 
-    this.toneFilter.connect(this.convolver);
+    hornPresence.connect(this.convolver);
     this.convolver.connect(this.tunnelWet);
     this.tunnelWet.connect(this.masterGain);
 
@@ -613,7 +640,8 @@ export class SirenAudioEngine {
   private pushState() {
     if (!this.ready || !this.sendFn) return;
     const role = this.getManRole();
-    const mute = (this.pttHeld && !!this.micStream) || this.activePhrase !== null;
+    // Only live PTT microphone mutes the siren output; voice phrases play freely over/alongside active sirens & buttons
+    const mute = this.pttHeld && !!this.micStream;
     this.sendFn({
       type: 'state',
       s: {

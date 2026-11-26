@@ -50,10 +50,14 @@ body {
   min-height: 100%;
   background: var(--bg);
   color: var(--tx);
-  font-family: "Manrope", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+  font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overflow-x: hidden;
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
+}
+
+.hardware-display {
+  font-family: "Oswald", "IBM Plex Sans", sans-serif;
 }
 
 .no-select {
@@ -90,37 +94,96 @@ body {
   pointer-events: none;
 }
 
-/* Matte Anodized Hardware Chassis Frame (Hazard 7007) */
+/* Matte Anodized Hardware Chassis Frame (Visibly Weathered Premier Hazard 7007) */
 :root[data-theme="hardware"] .chassis-frame {
   background:
-    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.04), transparent 55%),
-    linear-gradient(180deg, #0b0c10 0%, #050608 100%);
-  border: 1px solid #1d2027;
-  border-radius: 22px;
-  padding: 8px;
+    /* Rubbed bare-metal aluminum corner scuffs & edge wear */
+    radial-gradient(ellipse at 4% 6%, rgba(195, 206, 224, 0.22) 0%, transparent 18%),
+    radial-gradient(ellipse at 96% 8%, rgba(185, 196, 214, 0.16) 0%, transparent 16%),
+    radial-gradient(ellipse at 6% 96%, rgba(180, 190, 208, 0.18) 0%, transparent 20%),
+    radial-gradient(ellipse at 94% 94%, rgba(195, 206, 224, 0.2) 0%, transparent 18%),
+    linear-gradient(180deg, #1b1e25 0%, #101216 14%, #090a0d 84%, #15171d 100%);
+  border: 1px solid #303540;
+  border-radius: 16px;
+  padding: 7px;
   box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.92),
-    inset 0 1px 0 rgba(255, 255, 255, 0.09),
-    inset 0 -2px 6px rgba(0, 0, 0, 0.85);
+    0 24px 56px rgba(0, 0, 0, 0.96),
+    inset 0 1px 0 rgba(230, 238, 255, 0.2),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.95);
+  position: relative;
 }
 
 :root[data-theme="hardware"] .chassis-gold-ring {
-  border: 1px solid rgba(217, 187, 102, 0.42);
-  border-radius: 15px;
-  padding: 14px 13px 15px;
+  border: 1px solid rgba(208, 178, 92, 0.45);
+  border-radius: 11px;
+  padding: 12px 11px 12px;
   background:
+    /* Visible brushed dark metal streaks & worn oil/finger spots */
+    radial-gradient(circle at 26% 35%, rgba(255, 255, 255, 0.065) 0%, transparent 28%),
+    radial-gradient(circle at 74% 35%, rgba(255, 255, 255, 0.055) 0%, transparent 28%),
+    radial-gradient(circle at 27% 72%, rgba(215, 195, 130, 0.045) 0%, transparent 24%),
+    radial-gradient(circle at 72% 72%, rgba(255, 255, 255, 0.04) 0%, transparent 24%),
     repeating-linear-gradient(
       90deg,
-      rgba(255, 255, 255, 0.008) 0px,
-      rgba(255, 255, 255, 0.008) 1px,
+      rgba(255, 255, 255, 0.022) 0px,
+      rgba(255, 255, 255, 0.022) 1px,
       transparent 1px,
-      transparent 3px
+      transparent 2.5px
     ),
-    linear-gradient(180deg, #0a0b0e 0%, #040507 100%);
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.16) 0px,
+      rgba(0, 0, 0, 0.16) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    linear-gradient(180deg, #13151a 0%, #0b0c10 50%, #07080a 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(217, 187, 102, 0.12),
-    inset 0 10px 24px rgba(0, 0, 0, 0.65);
+    inset 0 0 0 1px rgba(208, 178, 92, 0.12),
+    inset 0 12px 24px rgba(0, 0, 0, 0.78);
   position: relative;
+  overflow: hidden;
+}
+
+/* Countersunk Corner Hardware Mounting Screws */
+.chassis-screw {
+  display: none;
+}
+
+:root[data-theme="hardware"] .chassis-screw {
+  display: block;
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #8e96a6 0%, #3d424d 45%, #16181e 78%, #07080a 100%);
+  border: 1px solid #050608;
+  box-shadow:
+    0 0 0 1.5px rgba(0, 0, 0, 0.85),
+    inset 0 1px 1px rgba(255, 255, 255, 0.4),
+    0 1px 2px rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  z-index: 4;
+}
+
+:root[data-theme="hardware"] .chassis-screw::before,
+:root[data-theme="hardware"] .chassis-screw::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: #060709;
+  transform: translate(-50%, -50%) rotate(32deg);
+}
+
+:root[data-theme="hardware"] .chassis-screw::before {
+  width: 6.5px;
+  height: 1.5px;
+}
+
+:root[data-theme="hardware"] .chassis-screw::after {
+  width: 1.5px;
+  height: 6.5px;
 }
 
 :root[data-theme="glass"] .chassis-frame {
@@ -128,8 +191,8 @@ body {
   backdrop-filter: blur(26px) saturate(190%);
   -webkit-backdrop-filter: blur(26px) saturate(190%);
   border: 1px solid var(--surface-border);
-  border-radius: 28px;
-  padding: 16px;
+  border-radius: 26px;
+  padding: 14px;
   box-shadow: var(--surface-shadow);
 }
 
@@ -145,24 +208,24 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4px 10px;
-  border: 1px solid rgba(217, 187, 102, 0.55);
-  box-shadow: inset 0 0 0 1px rgba(217, 187, 102, 0.16);
-  background: rgba(0, 0, 0, 0.45);
+  padding: 3px 8px;
+  border: 1px solid rgba(205, 174, 88, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(205, 174, 88, 0.14);
+  background: rgba(0, 0, 0, 0.5);
   line-height: 1.05;
 }
 
 .hazard-badge span:first-child {
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.21em;
   color: var(--acc);
 }
 
 .hazard-badge span:last-child {
-  font-size: 13px;
+  font-size: 11.5px;
   font-weight: 800;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.13em;
   color: var(--acc);
 }
 
@@ -293,8 +356,8 @@ body.siren-active .bg-mesh i:nth-child(3) {
 
 .dial-stage {
   position: relative;
-  width: 112px;
-  height: 112px;
+  width: 98px;
+  height: 98px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -311,15 +374,15 @@ body.siren-active .bg-mesh i:nth-child(3) {
   left: 50%;
   top: 2px;
   width: 1.5px;
-  height: 5px;
+  height: 4.5px;
   margin-left: -0.75px;
   background: rgba(255, 255, 255, 0.2);
-  transform-origin: 50% 54px;
+  transform-origin: 50% 47px;
   border-radius: 1px;
 }
 
 .dial-tick.major {
-  height: 7px;
+  height: 6.5px;
   width: 2px;
   margin-left: -1px;
   background: rgba(217, 187, 102, 0.55);
@@ -331,8 +394,8 @@ body.siren-active .bg-mesh i:nth-child(3) {
 }
 
 .dial {
-  width: 88px;
-  height: 88px;
+  width: 78px;
+  height: 78px;
   border-radius: 50%;
   position: relative;
   touch-action: none;
@@ -340,8 +403,8 @@ body.siren-active .bg-mesh i:nth-child(3) {
   background: #08090c;
   border: 1px solid #242730;
   box-shadow:
-    0 12px 24px rgba(0, 0, 0, 0.82),
-    0 2px 6px rgba(0, 0, 0, 0.65),
+    0 10px 20px rgba(0, 0, 0, 0.85),
+    0 2px 5px rgba(0, 0, 0, 0.65),
     inset 0 1px 1px rgba(255, 255, 255, 0.14);
 }
 
@@ -351,27 +414,39 @@ body.siren-active .bg-mesh i:nth-child(3) {
 
 .dial-knurl {
   position: absolute;
-  inset: -4px;
+  inset: -4.5px;
   border-radius: 50%;
   background: repeating-conic-gradient(
     from 0deg,
-    #24272f 0deg 6deg,
-    #0a0b0e 6deg 12deg
+    #353945 0deg 5deg,
+    #0c0d11 5deg 11deg
   );
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 10px 20px rgba(0, 0, 0, 0.92),
+    0 0 0 3px rgba(0, 0, 0, 0.65);
   pointer-events: none;
 }
 
 .dial-cap {
   position: absolute;
-  inset: 7px;
+  inset: 5.5px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 28%, #262932 0%, #14161b 45%, #07080a 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    /* Machined radial lathe rings + worn satin thumb center */
+    repeating-radial-gradient(
+      circle at 50% 50%,
+      rgba(255, 255, 255, 0.035) 0px,
+      rgba(255, 255, 255, 0.035) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    radial-gradient(circle at 44% 40%, rgba(255, 255, 255, 0.13) 0%, transparent 44%),
+    radial-gradient(circle at 35% 28%, #2e323d 0%, #171920 48%, #07080b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow:
-    inset 0 1.5px 2px rgba(255, 255, 255, 0.14),
-    inset 0 -3px 6px rgba(0, 0, 0, 0.85);
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.2),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.9);
   pointer-events: none;
 }
 
@@ -396,15 +471,15 @@ body.siren-active .bg-mesh i:nth-child(3) {
 .dial-needle {
   position: absolute;
   left: 50%;
-  top: 10px;
-  width: 4.5px;
-  height: 22px;
-  margin-left: -2.25px;
+  top: 9px;
+  width: 4px;
+  height: 19px;
+  margin-left: -2px;
   border-radius: 3px;
-  background: linear-gradient(180deg, #f3eedd 0%, #cfc6ab 100%);
+  background: linear-gradient(180deg, #efe9d6 0%, #bdb394 100%);
   box-shadow:
-    0 0 8px rgba(243, 238, 221, 0.35),
-    0 1px 2px rgba(0, 0, 0, 0.8);
+    0 0 6px rgba(243, 238, 221, 0.28),
+    0 1px 2px rgba(0, 0, 0, 0.85);
 }
 
 :root[data-theme="glass"] .dial-needle {
@@ -412,19 +487,24 @@ body.siren-active .bg-mesh i:nth-child(3) {
   box-shadow: 0 0 10px var(--acc);
 }
 
-/* Hardware & Glass Tactile Buttons */
+/* Hardware & Glass Tactile Molded Keys */
 .siren-btn {
-  border: 1px solid #23262e;
-  background: linear-gradient(180deg, #15171c 0%, #0b0c10 100%);
+  font-family: "Oswald", "IBM Plex Sans", sans-serif;
+  border: 1px solid #2b2f3b;
+  border-bottom: 2px solid #060709;
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(255, 255, 255, 0.08) 0%, transparent 58%),
+    linear-gradient(180deg, #1d2028 0%, #101217 65%, #0a0b0f 100%);
   color: var(--tx);
-  border-radius: 11px;
-  min-height: 46px;
-  font-weight: 700;
+  border-radius: 7px;
+  min-height: 40px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   cursor: pointer;
   box-shadow:
-    0 3px 8px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.09),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.65);
+    0 4px 8px rgba(0, 0, 0, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.75);
   transition:
     transform 0.08s cubic-bezier(0.16, 1, 0.3, 1),
     background 0.16s ease,
@@ -435,24 +515,25 @@ body.siren-active .bg-mesh i:nth-child(3) {
 }
 
 :root[data-theme="glass"] .siren-btn {
+  font-family: "IBM Plex Sans", sans-serif;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.075);
-  border-radius: 18px;
+  border-radius: 16px;
   box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.3);
 }
 
 .siren-btn:active,
 .siren-btn.pressed {
-  transform: translateY(1px) scale(0.97);
+  transform: translateY(1.5px) scale(0.975);
 }
 
 .siren-btn.active {
-  background: linear-gradient(180deg, #332914 0%, #1d1709 100%);
-  border-color: rgba(217, 187, 102, 0.82);
+  background: linear-gradient(180deg, #3c2f15 0%, #1f1809 100%);
+  border-color: rgba(217, 187, 102, 0.85);
   color: #f9e6a8;
   box-shadow:
-    0 0 18px rgba(217, 187, 102, 0.22),
-    inset 0 1px 0 rgba(255, 232, 160, 0.32);
+    0 0 18px rgba(217, 187, 102, 0.26),
+    inset 0 1px 0 rgba(255, 232, 160, 0.35);
 }
 
 :root[data-theme="glass"] .siren-btn.active {
@@ -473,13 +554,15 @@ body.siren-active .bg-mesh i:nth-child(3) {
     inset 0 1px 0 rgba(255, 160, 170, 0.35);
 }
 
-/* Framed Ivory Membrane Keys (MAN & HORN in Hardware Theme) */
+/* Deep Recessed 3D Silicone Rubber Wells (Real Premier Hazard 7007 MAN & HORN) */
 .key-bezel {
-  border: 1px solid rgba(217, 187, 102, 0.34);
-  border-radius: 13px;
+  border: 1px solid rgba(204, 174, 88, 0.42);
+  border-radius: 10px;
   padding: 4px;
-  background: #040507;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.8);
+  background: linear-gradient(180deg, #050608 0%, #0d0f13 100%);
+  box-shadow:
+    inset 0 4px 8px rgba(0, 0, 0, 0.96),
+    0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 :root[data-theme="glass"] .key-bezel {
@@ -491,42 +574,64 @@ body.siren-active .bg-mesh i:nth-child(3) {
 
 .membrane-key {
   width: 100%;
-  border-radius: 9px;
-  padding: 13px 8px;
-  border: 1px solid #f0ebd9;
-  background: linear-gradient(180deg, #ece7d7 0%, #ccc5af 100%);
-  color: #161512;
+  border-radius: 6px;
+  padding: 10px 6px;
+  border-top: 2px solid #f4efe0;
+  border-left: 2px solid #bfb69b;
+  border-right: 2px solid #b5ac90;
+  border-bottom: 3.5px solid #8a8066;
+  background:
+    /* Finger wear patina in center + milky backlit silicone dome */
+    radial-gradient(ellipse at 50% 62%, rgba(120, 108, 82, 0.22) 0%, transparent 45%),
+    radial-gradient(ellipse at 50% 42%, rgba(255, 249, 224, 0.94) 0%, rgba(218, 209, 182, 0.92) 64%, rgba(172, 162, 134, 0.98) 100%);
+  color: #171612;
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
   box-shadow:
-    0 4px 10px rgba(0, 0, 0, 0.65),
-    inset 0 2px 1px rgba(255, 255, 255, 0.82),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.22);
-  transition: transform 0.08s ease, box-shadow 0.14s ease, filter 0.14s ease;
+    0 5px 10px rgba(0, 0, 0, 0.82),
+    inset 0 1px 2px rgba(255, 255, 255, 0.85),
+    inset 0 0 12px rgba(85, 76, 54, 0.2);
+  transition: transform 0.07s ease, box-shadow 0.12s ease, filter 0.12s ease;
   touch-action: manipulation;
+}
+
+/* Molded inner raised rubber pad face */
+.membrane-key::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 4px;
+  border: 1px solid rgba(68, 59, 41, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  pointer-events: none;
 }
 
 .membrane-key:active,
 .membrane-key.pressed {
-  transform: translateY(1px) scale(0.975);
+  transform: translateY(2px) scale(0.975);
+  border-bottom-width: 2px;
   box-shadow:
-    0 1px 4px rgba(0, 0, 0, 0.7),
-    inset 0 2px 5px rgba(0, 0, 0, 0.32);
+    0 1px 3px rgba(0, 0, 0, 0.88),
+    inset 0 3px 7px rgba(0, 0, 0, 0.38);
 }
 
 .membrane-key.man-lit {
-  background: linear-gradient(180deg, #fff5cf 0%, #efd687 100%);
-  border-color: #ffe89e;
+  background:
+    radial-gradient(ellipse at 50% 50%, #fffbe0 0%, #f5d87e 70%, #d4b04e 100%);
+  border-color: #ffe89a;
   box-shadow:
-    0 0 22px rgba(255, 212, 107, 0.42),
-    inset 0 2px 1px rgba(255, 255, 255, 0.9);
+    0 0 22px rgba(255, 208, 92, 0.52),
+    inset 0 2px 2px rgba(255, 255, 255, 0.92);
 }
 
 .membrane-key.horn-lit {
-  background: linear-gradient(180deg, #ffd8dc 0%, #f08995 100%);
+  background:
+    radial-gradient(ellipse at 50% 50%, #ffe6e8 0%, #f29ca6 72%, #d46a76 100%);
   border-color: #ff99a4;
   box-shadow:
-    0 0 24px rgba(255, 59, 78, 0.48),
-    inset 0 2px 1px rgba(255, 255, 255, 0.85);
+    0 0 22px rgba(255, 59, 78, 0.52),
+    inset 0 2px 2px rgba(255, 255, 255, 0.85);
 }
 
 :root[data-theme="glass"] .membrane-key {
@@ -595,9 +700,13 @@ input:focus-visible,
   outline-offset: 2px;
 }
 
-/* Gate blur */
+/* Light non-obscuring gate blur so user sees the Hazard 7007 console behind the modal */
+#app-shell {
+  transition: filter 0.3s ease;
+}
+
 body.gated #app-shell {
-  filter: blur(18px);
+  filter: blur(2px) brightness(0.84);
   pointer-events: none;
   user-select: none;
 }
@@ -625,17 +734,17 @@ body.gated #app-shell {
   }
 }
 
-/* Compact 320px tweaks */
+/* Compact 320px tweaks (~10% smaller) */
 @media (max-width: 360px) {
   .dial-stage {
-    width: 96px;
-    height: 96px;
+    width: 86px;
+    height: 86px;
   }
   .dial {
-    width: 76px;
-    height: 76px;
+    width: 68px;
+    height: 68px;
   }
   .dial-tick {
-    transform-origin: 50% 46px;
+    transform-origin: 50% 41px;
   }
 }
