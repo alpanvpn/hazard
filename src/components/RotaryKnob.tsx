@@ -4,6 +4,7 @@ interface RotaryKnobProps {
   size?: 'sm' | 'lg';
   value: number; // 0..1
   steps?: number; // 0 = continuous, >0 = discrete steps
+  hideTicks?: boolean;
   onTapStep?: () => void;
   onChange: (nextVal: number) => void;
   ariaLabel: string;
@@ -14,6 +15,7 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
   size = 'lg',
   value,
   steps = 0,
+  hideTicks = false,
   onTapStep,
   onChange,
   ariaLabel,
@@ -30,13 +32,14 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
   const angle = value * (maxArc * 2) - maxArc;
 
   const ticks = useMemo(() => {
+    if (hideTicks) return [];
     const count = steps > 0 ? steps + 1 : 13;
     return Array.from({ length: count }, (_, idx) => {
       const ratio = idx / (count - 1);
       const deg = ratio * (maxArc * 2) - maxArc;
       return { deg, lit: steps > 0 ? Math.abs(ratio - value) < 0.06 : ratio <= value + 0.01 };
     });
-  }, [steps, value, maxArc]);
+  }, [hideTicks, steps, value, maxArc]);
 
   const updateCircular = (clientX: number, clientY: number) => {
     const el = dialRef.current;

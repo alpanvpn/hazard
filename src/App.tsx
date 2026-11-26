@@ -8,7 +8,6 @@ import {
   Lightbulb,
   Lock,
   Megaphone,
-  Mic,
   MicOff,
   Power,
   Radio,
@@ -750,11 +749,8 @@ export default function App() {
   const manIsLit = manPressed || (engineSnap.powered && (engineSnap.altActive || engineSnap.wolfActive));
   const hornIsLit = hornPressed || engineSnap.hornActive;
 
-  // Ergonomic 3x2 mode grid order: Top row = 3 primary sirens (indices 1,2,3), Bottom row = Standby/PA/Radio (0,4,5)
-  const gridModes = useMemo(
-    () => [1, 2, 3, 0, 4, 5].map((i) => sguSpec.modes[i]).filter(Boolean),
-    [sguSpec]
-  );
+  // Exact symmetric circular horseshoe angles around the right MODE rotary knob
+  const ARC_ANGLES = [-125, -75, -25, 25, 75, 125] as const;
 
   return (
     <>
@@ -773,14 +769,14 @@ export default function App() {
       <div className="bg-mesh" aria-hidden="true" />
       <div className={`flash-overlay ${lightMode}`} aria-hidden="true" />
 
-      {/* Main Compact Application Shell (fits comfortably on phone without unnecessary scrolling) */}
+      {/* Main Compact Application Shell */}
       <div
         id="app-shell"
         data-sgu={sguSystem}
-        className="relative z-10 min-h-dvh mx-auto w-full max-w-4xl px-3 sm:px-5 pt-[calc(env(safe-area-inset-top)+8px)] pb-[calc(78px+env(safe-area-inset-bottom))] lg:pb-8"
+        className="relative z-10 min-h-dvh mx-auto w-full max-w-4xl px-2.5 sm:px-5 pt-[calc(env(safe-area-inset-top)+6px)] pb-[calc(72px+env(safe-area-inset-bottom))] lg:pb-6"
       >
         {/* Top Bar */}
-        <header className="flex items-center justify-between gap-2 mb-2">
+        <header className="flex items-center justify-between gap-2 mb-1.5">
           <h1 className="text-lg sm:text-xl font-extrabold tracking-tight text-white whitespace-nowrap shrink-0">
             {sguSpec.brandBottom} <span style={{ color: sguSpec.accentColor }}>{sguSpec.modelCode}</span>
           </h1>
@@ -821,14 +817,14 @@ export default function App() {
         </header>
 
         {/* Responsive Grid: 1 column on mobile, 2 columns on desktop */}
-        <div className="grid grid-cols-1 lg:grid-cols-[440px_1fr] gap-3 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[446px_1fr] gap-2.5 items-start">
           {/* Primary Real SGU Console Unit */}
           <section
             aria-label="Пульт сирены"
             className={activeTab === 'siren' ? 'block' : 'hidden lg:block'}
           >
             {/* Compact Status + Isolated Live LED Meter Bar */}
-            <div className="panel-surface px-3.5 py-2 mb-2 flex items-center justify-between gap-2">
+            <div className="panel-surface px-3 py-1.5 mb-1.5 flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <p
                   className={`text-[11px] font-bold tracking-wider truncate ${
@@ -839,7 +835,7 @@ export default function App() {
                 </p>
                 <div className="flex items-baseline gap-2">
                   <span
-                    className="text-xl sm:text-2xl font-extrabold tracking-wide truncate"
+                    className="text-lg sm:text-xl font-extrabold tracking-wide truncate"
                     style={{ color: sguSpec.accentColor }}
                   >
                     {displayStatus.title}
@@ -854,218 +850,288 @@ export default function App() {
                   volume={volume}
                   subscribe={subscribeTelemetry}
                 />
-                <span className="mono-nums text-xs font-bold text-white/85 block mt-0.5">
+                <span className="mono-nums text-[11px] font-bold text-white/85 block mt-0.5">
                   {engineSnap.powered ? `${Math.round(volume * 100)}%` : 'OFF'}
                 </span>
               </div>
             </div>
 
-            {/* Clean Ergonomic SGU Console Card (Zero Boxy Clutter / Zero Scratches) */}
-            <div className="console-card p-3.5 sm:p-4 space-y-3">
-              {/* Top Brand Row: [PREMIER HAZARD] · Flags + Link · [7007] */}
-              <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-white/10">
-                <div className="hazard-badge shrink-0">
-                  <span
-                    className="text-[8.5px] font-extrabold tracking-[0.18em]"
-                    style={{ color: sguSpec.accentColor }}
-                  >
-                    {sguSpec.brandTop}
-                  </span>
-                  <span
-                    className="text-xs font-extrabold tracking-[0.12em]"
-                    style={{ color: sguSpec.accentColor }}
-                  >
-                    {sguSpec.brandBottom}
-                  </span>
-                </div>
-
-                <div className="flex flex-col items-center justify-center min-w-0 px-1">
-                  <RegionFlags compact />
-                  <a
-                    href={SITE_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mono-nums text-[10.5px] sm:text-xs font-extrabold leading-tight tracking-tight hover:underline no-underline truncate max-w-full mt-1"
-                    style={{ color: sguSpec.accentColor }}
-                  >
-                    {SITE_URL}
-                  </a>
-                </div>
-
-                <span
-                  className="text-xl sm:text-2xl font-extrabold italic tracking-wide shrink-0"
-                  style={{ color: sguSpec.accentColor }}
-                >
-                  {sguSpec.modelCode}
-                </span>
+            {/* Authentic Premier Hazard 7007 Hardware Console (Compact, Aligned Dials, Zero Dead Space) */}
+            <div className="sgu-chassis">
+              <div className="sgu-ear sgu-ear-left" aria-hidden="true">
+                <span className="sgu-ear-slot" />
+              </div>
+              <div className="sgu-ear sgu-ear-right" aria-hidden="true">
+                <span className="sgu-ear-slot" />
               </div>
 
-              {/* Dual Rotary Knobs Row: Volume & Mode */}
-              <div className="grid grid-cols-2 gap-3 items-center py-0.5">
-                <div className="flex flex-col items-center">
-                  <span className="text-[11px] font-extrabold tracking-widest text-[var(--dim)] mb-1">
-                    ГРОМКОСТЬ
-                  </span>
-                  <RotaryKnob
-                    size="sm"
-                    value={engineSnap.powered ? volume : 0}
-                    onChange={handleVolumeChange}
-                    ariaLabel="Громкость и включение"
-                    displayText={engineSnap.powered ? `${Math.round(volume * 100)}%` : 'OFF'}
-                  />
-                  <span
-                    className="mono-nums text-xs font-extrabold mt-1"
-                    style={{ color: engineSnap.powered ? sguSpec.accentColor : 'var(--dim)' }}
-                  >
-                    {engineSnap.powered ? `${Math.round(volume * 100)}%` : 'ВЫКЛ'}
-                  </span>
-                </div>
+              <div className="sgu-inner-frame">
+                {/* Top Zone: Tightly Aligned Left OFF/VOL Knob & Right Circular Mode Dial Arena */}
+                <div className="grid grid-cols-[106px_1fr] sm:grid-cols-[118px_1fr] items-center gap-1">
+                  {/* Left: OFF/VOL label cleanly at top + Knob pixel-aligned horizontally with Right Knob */}
+                  <div className="relative h-[144px] sm:h-[152px] w-full">
+                    <div className="absolute top-0.5 left-0 right-0 flex items-center justify-center gap-1.5">
+                      <span
+                        className={`w-2 h-2 rounded-full transition-colors ${
+                          engineSnap.powered
+                            ? 'bg-[var(--sgu-line)] shadow-[0_0_8px_var(--sgu-line)]'
+                            : 'bg-white/20'
+                        }`}
+                        aria-hidden="true"
+                      />
+                      <span
+                        className="text-[10.5px] font-extrabold tracking-wider"
+                        style={{ color: sguSpec.accentColor }}
+                      >
+                        OFF/VOL
+                      </span>
+                      <span className="mono-nums text-[10px] font-bold text-white/85">
+                        {engineSnap.powered ? `${Math.round(volume * 100)}%` : 'ВЫКЛ'}
+                      </span>
+                    </div>
 
-                <div className="flex flex-col items-center">
-                  <span className="text-[11px] font-extrabold tracking-widest text-[var(--dim)] mb-1">
-                    РЕЖИМ
-                  </span>
-                  <RotaryKnob
-                    size="lg"
-                    value={knobModeValue}
-                    steps={knobOrder.length - 1}
-                    onTapStep={() => {
-                      const nextIdx = (Math.max(0, knobModeIndex) + 1) % knobOrder.length;
-                      handleSelectMode(knobOrder[nextIdx]);
-                    }}
-                    onChange={handleModeKnobChange}
-                    ariaLabel="Переключатель режимов СГУ"
-                    displayText={MODE_LABELS[engineSnap.mode]}
-                  />
-                  <span
-                    className="text-xs font-extrabold tracking-wider mt-1"
-                    style={{ color: sguSpec.accentColor }}
-                  >
-                    {sguSpec.modes.find((m) => m.mode === engineSnap.mode)?.label || MODE_LABELS[engineSnap.mode]}
-                  </span>
-                </div>
-              </div>
-
-              {/* Spacious 3x2 Mode Selector Grid */}
-              <div className="grid grid-cols-3 gap-2">
-                {gridModes.map((item) => {
-                  const active = engineSnap.powered && engineSnap.mode === item.mode;
-                  return (
-                    <button
-                      key={item.mode}
-                      type="button"
-                      onClick={() => handleSelectMode(item.mode)}
-                      aria-pressed={active}
-                      className={`siren-btn min-h-[46px] px-2 py-2 text-xs sm:text-[13px] font-extrabold tracking-wide whitespace-nowrap truncate ${
-                        active ? 'active' : ''
-                      }`}
+                    <div
+                      className="absolute -translate-x-1/2 -translate-y-1/2"
+                      style={{ left: '50%', top: '60%' }}
                     >
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
+                      <RotaryKnob
+                        size="sm"
+                        value={engineSnap.powered ? volume : 0}
+                        onChange={handleVolumeChange}
+                        ariaLabel="Громкость и включение"
+                        displayText={engineSnap.powered ? `${Math.round(volume * 100)}%` : 'OFF'}
+                      />
+                    </div>
+                  </div>
 
-              {/* Primary Action Keys: MAN & HORN */}
-              <div className="grid grid-cols-2 gap-2.5 pt-0.5">
-                <button
-                  type="button"
-                  onPointerDown={onManDown}
-                  onPointerUp={onManUp}
-                  onPointerCancel={onManUp}
-                  onLostPointerCapture={onManUp}
-                  aria-label={`${sguSpec.manLabel}: ручная сирена / смена`}
-                  aria-pressed={manIsLit}
-                  className={`console-key no-select ${manIsLit ? 'man-lit' : ''} ${
-                    manPressed ? 'pressed' : ''
-                  }`}
-                >
+                  {/* Right: Mode Knob + Symmetrical Circular Horseshoe LED Dots & Labels */}
+                  <div className="sgu-mode-arena">
+                    <div
+                      className="absolute -translate-x-1/2 -translate-y-1/2"
+                      style={{ left: '50%', top: '60%' }}
+                    >
+                      <RotaryKnob
+                        size="lg"
+                        hideTicks
+                        value={knobModeValue}
+                        steps={knobOrder.length - 1}
+                        onTapStep={() => {
+                          const nextIdx = (Math.max(0, knobModeIndex) + 1) % knobOrder.length;
+                          handleSelectMode(knobOrder[nextIdx]);
+                        }}
+                        onChange={handleModeKnobChange}
+                        ariaLabel="Переключатель режимов СГУ"
+                        displayText={MODE_LABELS[engineSnap.mode]}
+                      />
+                    </div>
+
+                    {sguSpec.modes.map((item, idx) => {
+                      const deg = ARC_ANGLES[idx] ?? 0;
+                      const rad = ((deg - 90) * Math.PI) / 180;
+                      const cos = Math.cos(rad);
+                      const sin = Math.sin(rad);
+
+                      const dotLeft = 50 + 24.5 * cos;
+                      const dotTop = 60 + 36.5 * sin;
+                      const lblLeft = 50 + 29.5 * cos;
+                      const lblTop = 60 + 45.5 * sin;
+
+                      const isLeft = deg < -40;
+                      const isTopLeft = deg === -25;
+                      const isTopRight = deg === 25;
+                      const tx = isLeft
+                        ? '-100%'
+                        : isTopLeft
+                        ? '-75%'
+                        : isTopRight
+                        ? '-25%'
+                        : '0%';
+
+                      const lit = engineSnap.powered && engineSnap.mode === item.mode;
+
+                      return (
+                        <React.Fragment key={item.mode}>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectMode(item.mode)}
+                            aria-label={`Режим ${item.label}`}
+                            aria-pressed={lit}
+                            className={`arc-dot ${lit ? 'lit' : ''}`}
+                            style={{ left: `${dotLeft}%`, top: `${dotTop}%` }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSelectMode(item.mode)}
+                            aria-pressed={lit}
+                            className={`arc-mode-btn ${lit ? 'lit' : ''} ${
+                              isLeft ? 'text-right' : isTopLeft || isTopRight ? 'text-center' : 'text-left'
+                            }`}
+                            style={{
+                              left: `${lblLeft}%`,
+                              top: `${lblTop}%`,
+                              transform: `translate(${tx}, -50%)`,
+                            }}
+                          >
+                            {item.label}
+                          </button>
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Middle Brand, Region Flags, Website Link & Model Strip */}
+                <div className="flex items-center justify-between gap-2 py-1.5 mt-1 border-t border-white/10">
+                  <div className="hazard-badge shrink-0">
+                    <span
+                      className="text-[8px] font-extrabold tracking-[0.18em]"
+                      style={{ color: sguSpec.accentColor }}
+                    >
+                      {sguSpec.brandTop}
+                    </span>
+                    <span
+                      className="text-[11px] font-extrabold tracking-[0.12em]"
+                      style={{ color: sguSpec.accentColor }}
+                    >
+                      {sguSpec.brandBottom}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col items-center justify-center min-w-0 px-1">
+                    <RegionFlags compact />
+                    <a
+                      href={SITE_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mono-nums text-[10px] sm:text-[11px] font-extrabold leading-tight tracking-tight hover:underline no-underline truncate max-w-full mt-0.5"
+                      style={{ color: sguSpec.accentColor }}
+                    >
+                      {SITE_URL}
+                    </a>
+                  </div>
+
                   <span
-                    className="text-base sm:text-lg font-extrabold tracking-wider"
-                    style={{ color: manIsLit ? undefined : sguSpec.accentColor }}
+                    className="text-lg sm:text-xl font-extrabold italic tracking-wide shrink-0"
+                    style={{ color: sguSpec.accentColor }}
                   >
-                    {sguSpec.manLabel}
+                    {sguSpec.modelCode}
                   </span>
-                  <span className="text-[11px] font-semibold text-white/70">
-                    Удержание / смена
-                  </span>
-                </button>
+                </div>
 
-                <button
-                  type="button"
-                  onPointerDown={onHornDown}
-                  onPointerUp={onHornUp}
-                  onPointerCancel={onHornUp}
-                  onLostPointerCapture={onHornUp}
-                  aria-label={`${sguSpec.hornLabel}: воздушный сигнал`}
-                  aria-pressed={hornIsLit}
-                  className={`console-key no-select ${hornIsLit ? 'horn-lit' : ''} ${
-                    hornPressed ? 'pressed' : ''
-                  }`}
-                >
-                  <span
-                    className="text-base sm:text-lg font-extrabold tracking-wider"
-                    style={{ color: hornIsLit ? undefined : '#fb7185' }}
+                {/* Bottom Zone: Left RJ45 Mic Socket (PTT) + Right Yellow-Framed White Square Keys (MAN / HORN) */}
+                <div className="grid grid-cols-[1fr_1.18fr] gap-2 items-end pt-1.5">
+                  <button
+                    type="button"
+                    onPointerDown={(e) => void onPttDown(e)}
+                    onPointerUp={onPttUp}
+                    onPointerCancel={onPttUp}
+                    onLostPointerCapture={onPttUp}
+                    aria-label={`${sguSpec.pttLabel}: удерживайте для громкой связи`}
+                    aria-pressed={pttPressed}
+                    className={`hw-mic-socket no-select ${pttPressed ? 'lit pressed' : ''}`}
                   >
-                    {sguSpec.hornLabel}
-                  </span>
-                  <span className="text-[11px] font-semibold text-white/70">
-                    Держи для сигнала
-                  </span>
-                </button>
+                    <div className="rj45-port" aria-hidden="true">
+                      <span className="rj45-pin" />
+                      <span className="rj45-pin" />
+                      <span className="rj45-pin" />
+                      <span className="rj45-pin" />
+                      <span className="rj45-pin" />
+                      <span className="rj45-pin" />
+                      <span className="rj45-latch" />
+                    </div>
+                    <div className="text-left min-w-0">
+                      <span
+                        className="block text-[11px] sm:text-xs font-extrabold tracking-wide leading-tight truncate"
+                        style={{ color: pttPressed ? '#fb7185' : sguSpec.accentColor }}
+                      >
+                        {sguSpec.pttLabel}
+                      </span>
+                      <span className="block text-[10px] font-semibold text-white/65 leading-tight truncate">
+                        Держи · ГГС
+                      </span>
+                    </div>
+                  </button>
+
+                  <div className="hw-keys-bezel">
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span
+                          className="text-[10px] font-extrabold tracking-wider leading-none"
+                          style={{ color: sguSpec.accentColor }}
+                        >
+                          {sguSpec.manLabel}
+                        </span>
+                        <button
+                          type="button"
+                          onPointerDown={onManDown}
+                          onPointerUp={onManUp}
+                          onPointerCancel={onManUp}
+                          onLostPointerCapture={onManUp}
+                          aria-label={`${sguSpec.manLabel}: ручная сирена / смена`}
+                          aria-pressed={manIsLit}
+                          className={`hw-white-key no-select ${manIsLit ? 'man-lit' : ''} ${
+                            manPressed ? 'pressed' : ''
+                          }`}
+                        >
+                          <span className="text-[11px] font-extrabold tracking-wide opacity-80">
+                            {sguSpec.manLabel}
+                          </span>
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span
+                          className="text-[10px] font-extrabold tracking-wider leading-none"
+                          style={{ color: sguSpec.accentColor }}
+                        >
+                          {sguSpec.hornLabel}
+                        </span>
+                        <button
+                          type="button"
+                          onPointerDown={onHornDown}
+                          onPointerUp={onHornUp}
+                          onPointerCancel={onHornUp}
+                          onLostPointerCapture={onHornUp}
+                          aria-label={`${sguSpec.hornLabel}: воздушный сигнал`}
+                          aria-pressed={hornIsLit}
+                          className={`hw-white-key no-select ${hornIsLit ? 'horn-lit' : ''} ${
+                            hornPressed ? 'pressed' : ''
+                          }`}
+                        >
+                          <span className="text-[11px] font-extrabold tracking-wide opacity-80">
+                            {sguSpec.hornLabel}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-
-              {/* Full-Width PTT Hold-to-Talk Bar */}
-              <button
-                type="button"
-                onPointerDown={(e) => void onPttDown(e)}
-                onPointerUp={onPttUp}
-                onPointerCancel={onPttUp}
-                onLostPointerCapture={onPttUp}
-                aria-label={`${sguSpec.pttLabel}: удерживайте для громкой связи`}
-                aria-pressed={pttPressed}
-                className={`siren-btn w-full min-h-[46px] px-3.5 py-2 flex items-center justify-between gap-3 no-select ${
-                  pttPressed ? 'horn-active pressed' : ''
-                }`}
-              >
-                <span className="flex items-center gap-2.5 min-w-0">
-                  <Mic className={`w-4 h-4 shrink-0 ${pttPressed ? 'text-white' : 'text-[var(--acc)]'}`} aria-hidden="true" />
-                  <span className="text-xs sm:text-[13px] font-extrabold tracking-wide text-left truncate">
-                    {sguSpec.pttLabel} · Удерживай, чтобы говорить
-                  </span>
-                </span>
-                <span
-                  className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                    pttPressed ? 'bg-rose-400 shadow-[0_0_8px_#fb7185]' : 'bg-white/25'
-                  }`}
-                  aria-hidden="true"
-                />
-              </button>
             </div>
 
             {micStatusMsg && (
-              <p className="mt-1.5 text-xs text-amber-300 font-semibold px-1">{micStatusMsg}</p>
+              <p className="mt-1 text-xs text-amber-300 font-semibold px-1">{micStatusMsg}</p>
             )}
 
             {/* Full-Width Emergency Cutoff Button Positioned Directly Between SGU Unit & DPS Voice Card */}
             <button
               type="button"
               onClick={handleStopAll}
-              className="siren-btn stop-switch w-full mt-2.5 min-h-[46px] px-4 py-2.5 text-xs sm:text-sm font-extrabold tracking-widest flex items-center justify-center gap-2"
+              className="siren-btn stop-switch w-full mt-2 min-h-[44px] px-4 py-2 text-xs sm:text-sm font-extrabold tracking-widest flex items-center justify-center gap-2"
             >
               <span className="w-2.5 h-2.5 rounded-full bg-rose-400 shadow-[0_0_8px_#fb7185]" aria-hidden="true" />
               <span>СТОП ВСЁ</span>
             </button>
 
             {/* Clean 3x2 Grid of All 6 Officer Megaphone Phrases */}
-            <div className="panel-surface mt-2.5 p-3 space-y-2">
+            <div className="panel-surface mt-2 p-2.5 space-y-1.5">
               <div className="flex items-center justify-between px-0.5">
                 <span className="text-xs font-extrabold tracking-wide text-[var(--acc)] flex items-center gap-1.5">
                   <Megaphone className="w-4 h-4" aria-hidden="true" />
                   <span>Голос ДПС (поверх сирены)</span>
                 </span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {DPS_PHRASES.map((phrase) => {
                   const active = engineSnap.activePhrase === phrase.id;
                   return (
@@ -1078,7 +1144,7 @@ export default function App() {
                       }}
                       aria-label={phrase.full}
                       aria-pressed={active}
-                      className={`siren-btn min-h-[44px] px-2.5 py-2 text-xs sm:text-[13px] whitespace-nowrap truncate ${
+                      className={`siren-btn min-h-[42px] px-2 py-1.5 text-xs sm:text-[13px] whitespace-nowrap truncate ${
                         active ? 'horn-active' : ''
                       }`}
                     >
@@ -1091,7 +1157,7 @@ export default function App() {
           </section>
 
           {/* Right Column on Desktop / Tab Content on Mobile */}
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {/* СГУ System Selector Section (Default: Premier Hazard 7007 -> Switchable to ГРАЧ, ЭЛИНА, БАРС!) */}
             <section
               aria-label="Выбор системы СГУ"
