@@ -17,7 +17,12 @@
     patriot:{ lo: 280,  hi: 730,  up: 0.138, down: 0.138, smooth: 0.0055, a: 268,    b: 745 },
   };
 
-  const HORN = { lo: 580, hi: 1620, rate: 54.4, rise: 0.3 };
+  const SGU_HORN = {
+    hazard: { lo: 580, hi: 1620, rate: 54.4, rise: 0.3, useRec: true },
+    grach:  { lo: 340, hi: 920,  rate: 38.5, rise: 0.42, useRec: false },
+    elina:  { lo: 490, hi: 1380, rate: 62.0, rise: 0.28, useRec: false },
+    bars:   { lo: 290, hi: 760,  rate: 28.0, rise: 0.45, useRec: false },
+  };
   const MAN = { start: 410, max: 1480, rise: 4800, tau: 0.78, cut: 290, spin: 1430, burst: 1000 };
 
   // T: 0=OFF, 1=WAIL, 2=YELP, 3=HILO, 4=PHASER, 5=FAST, 6=PIERCER, 7=RUMBLER, 8=AIRRAID, 9=MEGA/USA, 10=GRACH, 11=ELINA, 12=SMERCH, 13=BARS, 14=PATRIOT
@@ -71,6 +76,7 @@
     constructor(sr) {
       this.sr = sr;
       this.s = { power: false, tone: 0, man: 'off', manHeld: false, horn: false, mute: false };
+      this.sgu = 'hazard';
       this.source = 'rec';
       this.tbl = table(TIMBRE);
       this.hornTbl = table([1.0, 0.18, 0.36, 0.12, 0.22, 0.08]);
@@ -95,7 +101,6 @@
       this.kHornOn = k(0.002); this.kHornOff = k(0.015);
       this.kMute = k(0.004); this.kMan = k(0.004);
       this.kX = 1 / (0.035 * sr);
-      this.lnHorn = Math.log(HORN.hi / HORN.lo);
       this.statN = 0; this.statPeak = 0; this.onStat = null;
     }
 
@@ -110,6 +115,8 @@
         const prevTone = this.s.tone;
         Object.assign(this.s, m.s);
         if (this.s.tone === 9 && prevTone !== 9) this.usaT = 0;
+      } else if (m.type === 'sgu') {
+        this.sgu = SGU_HORN[m.id] ? m.id : 'hazard';
       } else if (m.type === 'source') {
         this.source = m.id === 'synth' ? 'synth' : 'rec';
       } else if (m.type === 'sample') {
@@ -118,7 +125,7 @@
           ls: Math.round((m.loopStart || 0) * this.sr),
           track: m.track || null,
           stepS: (m.step || 0.02) * this.sr,
-          hz: m.hz || 0,
+          hz: m.hz && m.hz > 20 ? m.hz : 904.4,
         };
       } else if (m.type === 'wolfData') {
         const pcm = m.pcm;
@@ -267,6 +274,8 @@
 
       const tbl = this.tbl, htbl = this.hornTbl, R = this.rec, V = this.v;
       const tone = R.tone, toneV = V.tone, hornR = R.horn;
+      const sh = SGU_HORN[this.sgu] || SGU_HORN.hazard;
+      const lnHorn = Math.log(sh.hi / sh.lo);
       let peak = 0;
 
       for (let i = 0; i < n; i++) {
@@ -285,10 +294,10 @@
             } else if (this.dir > 0) {
               // Logarithmic pitch curve matches real analog/digital SGU sirens
               this.tf *= Math.pow(p.b / p.a, dt / p.up);
-              if (this.tf >= p.b) { this.tf = p.b; this.dir = -1; }
+              if (this.tf >= p.b || !Number.isFinite(this.tf)) { this.tf = p.b; this.dir = -1; }
             } else {
               this.tf /= Math.pow(p.b / p.a, dt / p.down);
-              if (this.tf <= p.a) { this.tf = p.a; this.dir = 1; }
+              if (this.tf <= p.a || !Number.isFinite(this.tf)) { this.tf = p.a; this.dir = 1; }
             }
             this.f1 += (this.tf - this.f1) * ks;
             this.f += (this.f1 - this.f) * ks;
@@ -307,6 +316,7 @@
           if (this.mf < MAN.cut * 0.9) this.mf = 0;
         }
 
+        if (!Number.isFinite(this.f) || this.f < 0) this.f = 0;
         this.amp += (ampT - this.amp) * (ampT > this.amp ? this.kAmp : this.kAmpOff);
 
         let y = 0;
@@ -332,8 +342,9 @@
             const hornHarm = tbl[sj] + (tbl[sj + 1] - tbl[sj]) * sfr;
             const blended = rawTone * 0.72 + hornHarm * 0.28;
             y += Math.tanh(blended * 1.28) * 0.88 * eq(toneV.g);
-            toneV.pos += this.f / tone.hz;
-            while (toneV.pos >= tone.pcm.length) toneV.pos -= tone.pcm.length;
+            const step = this.f / (tone.hz || 904.4);
+            toneV.pos += Number.isFinite(step) && step >= 0 ? step : 1;
+            if (toneV.pos >= tone.pcm.length) toneV.pos %= tone.pcm.length;
           }
           y *= this.amp;
         } else if (this.amp > 1e-5) {
@@ -347,18 +358,19 @@
         this.hg += (hornT - this.hg) * (hornT > this.hg ? this.kHornOn : this.kHornOff);
         if (this.hg > 1e-5) {
           let h;
-          if (rec && hornR) {
+          if (sh.useRec && rec && hornR) {
             h = read(hornR.pcm, this.hornPos);
             this.hornPos += 1;
             if (this.hornPos >= hornR.pcm.length) this.hornPos = hornR.ls + (this.hornPos - hornR.pcm.length);
           } else {
-            this.hph += HORN.rate * dt;
+            this.hph += sh.rate * dt;
             if (this.hph >= 1) this.hph -= 1;
-            const u = this.hph < HORN.rise ? this.hph / HORN.rise : 1 - (this.hph - HORN.rise) / (1 - HORN.rise);
-            this.hc += HORN.lo * Math.exp(u * this.lnHorn) * dt;
+            const u = this.hph < sh.rise ? this.hph / sh.rise : 1 - (this.hph - sh.rise) / (1 - sh.rise);
+            this.hc += sh.lo * Math.exp(u * lnHorn) * dt;
             this.hc -= Math.floor(this.hc);
             const x = this.hc * TBL, j = x | 0, fr = x - j;
-            h = (htbl[j] + (htbl[j + 1] - htbl[j]) * fr) * OUT_SYN;
+            const rawH = htbl[j] + (htbl[j + 1] - htbl[j]) * fr;
+            h = Math.tanh(rawH * 1.38) * 0.92 * OUT_SYN;
           }
           y = y * (1 - this.hg) + h * this.hg;
         }

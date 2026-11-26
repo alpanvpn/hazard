@@ -1,25 +1,23 @@
 import React, { useMemo, useRef } from 'react';
 
 interface RotaryKnobProps {
-  label: string;
-  displayValue: string;
-  hint: string;
+  size?: 'sm' | 'lg';
   value: number; // 0..1
   steps?: number; // 0 = continuous, >0 = discrete steps
   onTapStep?: () => void;
   onChange: (nextVal: number) => void;
   ariaLabel: string;
+  displayText?: string;
 }
 
 export const RotaryKnob: React.FC<RotaryKnobProps> = ({
-  label,
-  displayValue,
-  hint,
+  size = 'lg',
   value,
   steps = 0,
   onTapStep,
   onChange,
   ariaLabel,
+  displayText,
 }) => {
   const dialRef = useRef<HTMLDivElement | null>(null);
   const activePointerId = useRef<number | null>(null);
@@ -27,16 +25,16 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
   const startPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const lastSnappedRef = useRef<number>(value);
 
-  const angle = value * 270 - 135;
+  // -135..+135 for volume; -125..+125 for 6-position circular horseshoe selector
+  const maxArc = steps > 0 ? 125 : 135;
+  const angle = value * (maxArc * 2) - maxArc;
 
   const ticks = useMemo(() => {
-    const count = steps > 0 ? steps + 1 : 17;
+    const count = steps > 0 ? 0 : 13;
     return Array.from({ length: count }, (_, idx) => {
       const ratio = idx / (count - 1);
       const deg = ratio * 270 - 135;
-      const major = steps > 0 || idx % 4 === 0;
-      const lit = ratio <= value + 0.01;
-      return { deg, major, lit };
+      return { deg, lit: ratio <= value + 0.01 };
     });
   }, [steps, value]);
 
@@ -46,13 +44,12 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
     const rect = el.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
-    // Ignore tiny jitter right on top of the center pivot
-    if (Math.hypot(clientX - cx, clientY - cy) < 10) return;
+    if (Math.hypot(clientX - cx, clientY - cy) < 8) return;
 
     let ang = (Math.atan2(clientY - cy, clientX - cx) * 180) / Math.PI + 90;
     if (ang > 180) ang -= 360;
-    ang = Math.max(-135, Math.min(135, ang));
-    let v = (ang + 135) / 270;
+    ang = Math.max(-maxArc, Math.min(maxArc, ang));
+    let v = (ang + maxArc) / (maxArc * 2);
     if (steps > 0) {
       v = Math.round(v * steps) / steps;
     }
@@ -69,7 +66,11 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
     movedRef.current = false;
     startPosRef.current = { x: e.clientX, y: e.clientY };
     lastSnappedRef.current = value;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // iOS Safari may ignore synthetic capture
+    }
     if (!onTapStep) {
       updateCircular(e.clientX, e.clientY);
     }
@@ -92,6 +93,13 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
       }
       activePointerId.current = null;
     }
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {
+      // Ignore release failures
+    }
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -105,50 +113,45 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
     }
   };
 
-  return (
-    <div className="flex flex-col items-center text-center w-[47%] no-select">
-      <span className="dial-label text-[10px] font-bold tracking-[0.14em] uppercase">{label}</span>
-      <span className="mono-nums dial-readout text-[11px] font-extrabold mt-0.5 mb-2 tracking-wider">
-        {displayValue}
-      </span>
+  const isSmall = size === 'sm';
 
-      <div className="dial-stage">
+  return (
+    <div className={`dial-stage ${isSmall ? 'dial-sm' : 'dial-lg'} no-select`}>
+      {ticks.length > 0 && (
         <div className="dial-ticks" aria-hidden="true">
           {ticks.map((t, idx) => (
             <span
               key={idx}
-              className={`dial-tick ${t.major ? 'major' : ''} ${t.lit ? 'lit' : ''}`}
+              className={`dial-tick ${t.lit ? 'lit' : ''}`}
               style={{ transform: `rotate(${t.deg}deg)` }}
             />
           ))}
         </div>
+      )}
 
-        <div
-          ref={dialRef}
-          role="slider"
-          tabIndex={0}
-          aria-label={ariaLabel}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(value * 100)}
-          aria-valuetext={displayValue}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerEnd}
-          onPointerCancel={onPointerEnd}
-          onLostPointerCapture={onPointerEnd}
-          onKeyDown={onKeyDown}
-          className="dial"
-        >
-          <div className="dial-knurl" aria-hidden="true" />
-          <div className="dial-cap" aria-hidden="true" />
-          <div className="dial-rotor" style={{ transform: `rotate(${angle}deg)` }}>
-            <span className="dial-needle" />
-          </div>
+      <div
+        ref={dialRef}
+        role="slider"
+        tabIndex={0}
+        aria-label={ariaLabel}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(value * 100)}
+        aria-valuetext={displayText ?? `${Math.round(value * 100)}%`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+        onLostPointerCapture={onPointerEnd}
+        onKeyDown={onKeyDown}
+        className={`dial ${isSmall ? 'dial-sm' : 'dial-lg'}`}
+      >
+        <div className="dial-knurl" aria-hidden="true" />
+        <div className="dial-cap" aria-hidden="true" />
+        <div className="dial-rotor" style={{ transform: `rotate(${angle}deg)` }}>
+          <span className="dial-needle" />
         </div>
       </div>
-
-      <span className="mt-1.5 text-[10px] text-[var(--dim)]">{hint}</span>
     </div>
   );
 };

@@ -1,43 +1,47 @@
 @import "tailwindcss";
 
-/* Default theme: Realistic Matte-Black Premier Hazard 7007 Hardware */
+/* Default theme: Authentic Premier Hazard 7007 Matte Black ABS Hardware */
 :root,
 :root[data-theme="hardware"] {
-  --bg: #030406;
-  --surface: linear-gradient(180deg, #0d0f13 0%, #07080b 100%);
-  --surface-border: rgba(255, 255, 255, 0.1);
+  --bg: #07080b;
+  --surface: #121419;
+  --surface-border: rgba(255, 255, 255, 0.14);
   --surface-shadow:
-    0 18px 46px rgba(0, 0, 0, 0.85),
-    inset 0 1px 0 rgba(255, 255, 255, 0.09),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.7);
-  --tx: #f3f5f8;
-  --dim: #7b808c;
-  --acc: #d9bb66;
-  --acc-dim: rgba(217, 187, 102, 0.42);
+    0 12px 32px rgba(0, 0, 0, 0.78),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --tx: #f4f6f9;
+  --dim: #9ba3b2;
+  --acc: #f0c419;
+  --acc-dim: rgba(240, 196, 25, 0.45);
   --r: #ff3b4e;
   --b: #2f7bff;
-  --ok: #90d65c;
-  --radius-card: 20px;
+  --ok: #8ce05a;
+  --radius-card: 16px;
 }
 
 /* Optional theme: Liquid Glass */
 :root[data-theme="glass"] {
-  --bg: #05070d;
-  --surface: rgba(255, 255, 255, 0.085);
-  --surface-border: rgba(255, 255, 255, 0.2);
+  --bg: #070a12;
+  --surface: rgba(255, 255, 255, 0.09);
+  --surface-border: rgba(255, 255, 255, 0.22);
   --surface-shadow:
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.36),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
-    0 14px 42px rgba(0, 0, 0, 0.48);
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 12px 34px rgba(0, 0, 0, 0.46);
   --tx: #f4f6fb;
-  --dim: rgba(244, 246, 251, 0.62);
+  --dim: rgba(244, 246, 251, 0.68);
   --acc: #ffd46b;
   --acc-dim: rgba(255, 212, 107, 0.5);
   --r: #ff3b4e;
   --b: #2f7bff;
   --ok: #7dffa6;
-  --radius-card: 28px;
+  --radius-card: 22px;
 }
+
+/* SGU Hardware Accent Overrides */
+[data-sgu="hazard"] { --sgu-line: #e9be18; --sgu-label: #f4cc2a; }
+[data-sgu="grach"]  { --sgu-line: #ef4444; --sgu-label: #f87171; }
+[data-sgu="elina"]  { --sgu-line: #38bdf8; --sgu-label: #7dd3fc; }
+[data-sgu="bars"]   { --sgu-line: #f97316; --sgu-label: #fb923c; }
 
 * {
   box-sizing: border-box;
@@ -50,14 +54,10 @@ body {
   min-height: 100%;
   background: var(--bg);
   color: var(--tx);
-  font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overflow-x: hidden;
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
-}
-
-.hardware-display {
-  font-family: "Oswald", "IBM Plex Sans", sans-serif;
 }
 
 .no-select {
@@ -71,7 +71,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Primary Panel Surface (Adapts between Matte Black Hardware & Liquid Glass) */
 .panel-surface {
   background: var(--surface);
   border: 1px solid var(--surface-border);
@@ -80,230 +79,31 @@ body {
   position: relative;
 }
 
-:root[data-theme="glass"] .panel-surface {
-  backdrop-filter: blur(26px) saturate(190%);
-  -webkit-backdrop-filter: blur(26px) saturate(190%);
-}
-
-:root[data-theme="glass"] .panel-surface::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 40%);
-  pointer-events: none;
-}
-
-/* Matte Anodized Hardware Chassis Frame (Visibly Weathered Premier Hazard 7007) */
-:root[data-theme="hardware"] .chassis-frame {
-  background:
-    /* Rubbed bare-metal aluminum corner scuffs & edge wear */
-    radial-gradient(ellipse at 4% 6%, rgba(195, 206, 224, 0.22) 0%, transparent 18%),
-    radial-gradient(ellipse at 96% 8%, rgba(185, 196, 214, 0.16) 0%, transparent 16%),
-    radial-gradient(ellipse at 6% 96%, rgba(180, 190, 208, 0.18) 0%, transparent 20%),
-    radial-gradient(ellipse at 94% 94%, rgba(195, 206, 224, 0.2) 0%, transparent 18%),
-    linear-gradient(180deg, #1b1e25 0%, #101216 14%, #090a0d 84%, #15171d 100%);
-  border: 1px solid #303540;
-  border-radius: 16px;
-  padding: 7px;
-  box-shadow:
-    0 24px 56px rgba(0, 0, 0, 0.96),
-    inset 0 1px 0 rgba(230, 238, 255, 0.2),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.95);
-  position: relative;
-}
-
-:root[data-theme="hardware"] .chassis-gold-ring {
-  border: 1px solid rgba(208, 178, 92, 0.45);
-  border-radius: 11px;
-  padding: 12px 11px 12px;
-  background:
-    /* Visible brushed dark metal streaks & worn oil/finger spots */
-    radial-gradient(circle at 26% 35%, rgba(255, 255, 255, 0.065) 0%, transparent 28%),
-    radial-gradient(circle at 74% 35%, rgba(255, 255, 255, 0.055) 0%, transparent 28%),
-    radial-gradient(circle at 27% 72%, rgba(215, 195, 130, 0.045) 0%, transparent 24%),
-    radial-gradient(circle at 72% 72%, rgba(255, 255, 255, 0.04) 0%, transparent 24%),
-    repeating-linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.022) 0px,
-      rgba(255, 255, 255, 0.022) 1px,
-      transparent 1px,
-      transparent 2.5px
-    ),
-    repeating-linear-gradient(
-      0deg,
-      rgba(0, 0, 0, 0.16) 0px,
-      rgba(0, 0, 0, 0.16) 1px,
-      transparent 1px,
-      transparent 4px
-    ),
-    linear-gradient(180deg, #13151a 0%, #0b0c10 50%, #07080a 100%);
-  box-shadow:
-    inset 0 0 0 1px rgba(208, 178, 92, 0.12),
-    inset 0 12px 24px rgba(0, 0, 0, 0.78);
-  position: relative;
-  overflow: hidden;
-}
-
-/* Countersunk Corner Hardware Mounting Screws */
-.chassis-screw {
-  display: none;
-}
-
-:root[data-theme="hardware"] .chassis-screw {
-  display: block;
-  position: absolute;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 34% 30%, #8e96a6 0%, #3d424d 45%, #16181e 78%, #07080a 100%);
-  border: 1px solid #050608;
-  box-shadow:
-    0 0 0 1.5px rgba(0, 0, 0, 0.85),
-    inset 0 1px 1px rgba(255, 255, 255, 0.4),
-    0 1px 2px rgba(255, 255, 255, 0.08);
-  pointer-events: none;
-  z-index: 4;
-}
-
-:root[data-theme="hardware"] .chassis-screw::before,
-:root[data-theme="hardware"] .chassis-screw::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  background: #060709;
-  transform: translate(-50%, -50%) rotate(32deg);
-}
-
-:root[data-theme="hardware"] .chassis-screw::before {
-  width: 6.5px;
-  height: 1.5px;
-}
-
-:root[data-theme="hardware"] .chassis-screw::after {
-  width: 1.5px;
-  height: 6.5px;
-}
-
-:root[data-theme="glass"] .chassis-frame {
-  background: var(--surface);
-  backdrop-filter: blur(26px) saturate(190%);
-  -webkit-backdrop-filter: blur(26px) saturate(190%);
-  border: 1px solid var(--surface-border);
-  border-radius: 26px;
-  padding: 14px;
-  box-shadow: var(--surface-shadow);
-}
-
-:root[data-theme="glass"] .chassis-gold-ring {
-  border: none;
-  padding: 0;
-  background: transparent;
-}
-
-/* Premier Hazard Faceplate Logo Badge */
-.hazard-badge {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 3px 8px;
-  border: 1px solid rgba(205, 174, 88, 0.5);
-  box-shadow: inset 0 0 0 1px rgba(205, 174, 88, 0.14);
-  background: rgba(0, 0, 0, 0.5);
-  line-height: 1.05;
-}
-
-.hazard-badge span:first-child {
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.21em;
-  color: var(--acc);
-}
-
-.hazard-badge span:last-child {
-  font-size: 11.5px;
-  font-weight: 800;
-  letter-spacing: 0.13em;
-  color: var(--acc);
-}
-
-/* Background Canvas & Beacon Reflections */
+/* Zero-lag Background Glow (static CSS gradients, zero expensive blur(85px) filters) */
 .bg-mesh {
   position: fixed;
   inset: 0;
   z-index: 0;
-  overflow: hidden;
-  background: var(--bg);
   pointer-events: none;
+  background:
+    radial-gradient(ellipse 65% 45% at 15% 15%, rgba(47, 123, 255, 0.08), transparent 70%),
+    radial-gradient(ellipse 65% 45% at 85% 85%, rgba(233, 190, 24, 0.06), transparent 70%),
+    var(--bg);
 }
 
-.bg-mesh i {
+body.siren-active .bg-mesh::after {
+  content: "";
   position: absolute;
-  width: 68vmax;
-  height: 68vmax;
-  border-radius: 50%;
-  filter: blur(85px);
-  opacity: 0.08;
-  transition: opacity 0.35s ease;
-  will-change: transform, opacity;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(47, 123, 255, 0.16), transparent 45%),
+    radial-gradient(circle at 80% 25%, rgba(255, 59, 78, 0.16), transparent 45%);
+  animation: beacon-pulse 0.65s steps(1) infinite;
 }
 
-:root[data-theme="glass"] .bg-mesh i {
-  opacity: 0.4;
-}
-
-.bg-mesh i:nth-child(1) {
-  background: var(--b);
-  left: -28vmax;
-  top: -20vmax;
-  animation: drift 18s ease-in-out infinite alternate;
-}
-
-.bg-mesh i:nth-child(2) {
-  background: #6c2bd9;
-  right: -34vmax;
-  bottom: -24vmax;
-  animation: drift 22s ease-in-out infinite alternate-reverse;
-}
-
-.bg-mesh i:nth-child(3) {
-  background: var(--r);
-  left: 18vmax;
-  bottom: -38vmax;
-  opacity: 0.04;
-  animation: drift 16s ease-in-out infinite alternate;
-}
-
-:root[data-theme="glass"] .bg-mesh i:nth-child(3) {
-  opacity: 0.18;
-}
-
-@keyframes drift {
-  to {
-    transform: translate3d(10vmax, 7vmax, 0) scale(1.12);
-  }
-}
-
-@keyframes beacon-swap {
-  0%, 49% {
-    opacity: 0.5;
-  }
-  50%, 100% {
-    opacity: 0.06;
-  }
-}
-
-:root[data-theme="glass"] body.siren-active .bg-mesh i:nth-child(1),
-body.siren-active .bg-mesh i:nth-child(1) {
-  animation: beacon-swap 0.65s steps(1) infinite;
-}
-
-body.siren-active .bg-mesh i:nth-child(3) {
-  animation: beacon-swap 0.65s steps(1) infinite reverse;
-  opacity: 0.5;
-  background: var(--r);
+@keyframes beacon-pulse {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0.25; }
 }
 
 /* Strobe lightbar overlay */
@@ -314,54 +114,151 @@ body.siren-active .bg-mesh i:nth-child(3) {
   pointer-events: none;
   opacity: 0;
 }
-
-.flash-overlay.r {
-  opacity: 1;
-  animation: flash-rb 0.48s steps(1) infinite;
-}
-
-.flash-overlay.w {
-  opacity: 1;
-  animation: flash-white 0.095s steps(1) infinite;
-}
-
-.flash-overlay.a {
-  opacity: 1;
-  animation: flash-amber 0.78s steps(1) infinite;
-}
+.flash-overlay.r { opacity: 1; animation: flash-rb 0.48s steps(1) infinite; }
+.flash-overlay.w { opacity: 1; animation: flash-white 0.095s steps(1) infinite; }
+.flash-overlay.a { opacity: 1; animation: flash-amber 0.78s steps(1) infinite; }
 
 @keyframes flash-rb {
-  0% { background: rgba(255, 0, 32, 0.72); }
-  50% { background: rgba(0, 72, 255, 0.72); }
+  0% { background: rgba(255, 0, 32, 0.7); }
+  50% { background: rgba(0, 72, 255, 0.7); }
 }
-
 @keyframes flash-white {
-  0% { background: rgba(255, 255, 255, 0.92); }
-  50% { background: rgba(0, 0, 0, 0.2); }
+  0% { background: rgba(255, 255, 255, 0.9); }
+  50% { background: rgba(0, 0, 0, 0.18); }
 }
-
 @keyframes flash-amber {
-  0% { background: rgba(255, 174, 0, 0.75); }
+  0% { background: rgba(255, 174, 0, 0.72); }
   50% { background: transparent; }
 }
 
-/* Knurled Rotary Dial Hardware Look */
-.dial-label {
-  color: var(--acc);
+/* ============================================================
+   Authentic Molded ABS Hardware Box (matches Premier Hazard 7007 photo)
+   ============================================================ */
+.sgu-chassis-wrap {
+  position: relative;
 }
 
-.dial-readout {
-  color: var(--tx);
+:root[data-theme="hardware"] .sgu-chassis {
+  position: relative;
+  border-radius: 14px;
+  padding: 9px;
+  /* Textured matte stippled black ABS plastic look */
+  background:
+    radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 0) 0 0 / 4px 4px,
+    radial-gradient(rgba(0, 0, 0, 0.35) 1px, transparent 0) 2px 2px / 4px 4px,
+    linear-gradient(175deg, #24272f 0%, #17191f 25%, #111318 80%, #1b1d24 100%);
+  border: 1.5px solid #353944;
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.9),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.9);
 }
 
+:root[data-theme="glass"] .sgu-chassis {
+  position: relative;
+  border-radius: 22px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  box-shadow: var(--surface-shadow);
+}
+
+/* Signature Molded Side Mounting Ears (hidden only on tiny screens if crowded, visible >=380px) */
+:root[data-theme="hardware"] .mounting-ear {
+  position: absolute;
+  top: 52%;
+  width: 12px;
+  height: 52px;
+  transform: translateY(-50%);
+  background: linear-gradient(180deg, #23262e 0%, #14161c 100%);
+  border: 1px solid #323640;
+  pointer-events: none;
+}
+:root[data-theme="hardware"] .mounting-ear-left {
+  left: -10px;
+  border-radius: 6px 0 0 6px;
+  box-shadow: inset 2px 0 3px rgba(0, 0, 0, 0.7), -3px 4px 10px rgba(0, 0, 0, 0.7);
+}
+:root[data-theme="hardware"] .mounting-ear-right {
+  right: -10px;
+  border-radius: 0 6px 6px 0;
+  box-shadow: inset -2px 0 3px rgba(0, 0, 0, 0.7), 3px 4px 10px rgba(0, 0, 0, 0.7);
+}
+:root[data-theme="hardware"] .mounting-ear::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  border-radius: 99px;
+  background: #07080b;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Inner Yellow / SGU Colored Silkscreen Outline Box */
+:root[data-theme="hardware"] .sgu-faceplate {
+  position: relative;
+  border: 2px solid var(--sgu-line, #e9be18);
+  border-radius: 7px;
+  padding: 10px 10px 11px;
+  background:
+    radial-gradient(ellipse at 18% 12%, rgba(255, 255, 255, 0.045) 0%, transparent 45%),
+    linear-gradient(180deg, #16181e 0%, #101216 55%, #0b0d10 100%);
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.7),
+    0 1px 0 rgba(0, 0, 0, 0.8);
+}
+
+:root[data-theme="glass"] .sgu-faceplate {
+  position: relative;
+  border: 1.5px solid var(--sgu-line, #e9be18);
+  border-radius: 16px;
+  padding: 10px;
+  background: rgba(8, 10, 16, 0.45);
+}
+
+/* SGU System Variants subtle faceplate accents */
+:root[data-theme="hardware"] [data-sgu="grach"] .sgu-faceplate {
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.015) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #1b1a1f 0%, #111115 100%);
+}
+:root[data-theme="hardware"] [data-sgu="elina"] .sgu-faceplate {
+  background:
+    linear-gradient(180deg, #101724 0%, #0b0f17 100%);
+}
+:root[data-theme="hardware"] [data-sgu="bars"] .sgu-faceplate {
+  background:
+    linear-gradient(180deg, #191614 0%, #0f0d0c 100%);
+}
+
+/* Double-lined silkscreen logo box ("PREMIER HAZARD" / "ЭЛЕКТ ГРАЧ" etc.) */
+.hazard-badge {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  border: 1.5px solid var(--sgu-line, #e9be18);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.55);
+  line-height: 1.1;
+  border-radius: 3px;
+}
+
+/* ============================================================
+   Authentic Ribbed Fluted Rotary Knobs (OFF/VOL + Circular Mode Dial)
+   ============================================================ */
 .dial-stage {
   position: relative;
-  width: 98px;
-  height: 98px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+.dial-stage.dial-sm { width: 80px; height: 80px; }
+.dial-stage.dial-lg { width: 72px; height: 72px; }
 
 .dial-ticks {
   position: absolute;
@@ -373,323 +270,257 @@ body.siren-active .bg-mesh i:nth-child(3) {
   position: absolute;
   left: 50%;
   top: 2px;
-  width: 1.5px;
-  height: 4.5px;
-  margin-left: -0.75px;
-  background: rgba(255, 255, 255, 0.2);
-  transform-origin: 50% 47px;
+  width: 2px;
+  height: 4px;
+  margin-left: -1px;
+  background: rgba(255, 255, 255, 0.28);
+  transform-origin: 50% 38px;
   border-radius: 1px;
 }
-
-.dial-tick.major {
-  height: 6.5px;
-  width: 2px;
-  margin-left: -1px;
-  background: rgba(217, 187, 102, 0.55);
-}
-
 .dial-tick.lit {
-  background: var(--acc);
-  box-shadow: 0 0 6px rgba(217, 187, 102, 0.5);
+  background: var(--sgu-line, #e9be18);
 }
 
 .dial {
-  width: 78px;
-  height: 78px;
   border-radius: 50%;
   position: relative;
   touch-action: none;
   cursor: grab;
-  background: #08090c;
-  border: 1px solid #242730;
+  background: #0a0b0e;
   box-shadow:
-    0 10px 20px rgba(0, 0, 0, 0.85),
-    0 2px 5px rgba(0, 0, 0, 0.65),
-    inset 0 1px 1px rgba(255, 255, 255, 0.14);
+    0 8px 16px rgba(0, 0, 0, 0.92),
+    0 2px 4px rgba(0, 0, 0, 0.7);
 }
-
-.dial:active {
-  cursor: grabbing;
-}
+.dial.dial-sm { width: 62px; height: 62px; }
+.dial.dial-lg { width: 68px; height: 68px; }
+.dial:active { cursor: grabbing; }
 
 .dial-knurl {
   position: absolute;
-  inset: -4.5px;
+  inset: -4px;
   border-radius: 50%;
   background: repeating-conic-gradient(
-    from 0deg,
-    #353945 0deg 5deg,
-    #0c0d11 5deg 11deg
+    from -3deg,
+    #323743 0deg 8deg,
+    #0b0c10 8deg 22.5deg
   );
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
   box-shadow:
-    0 10px 20px rgba(0, 0, 0, 0.92),
-    0 0 0 3px rgba(0, 0, 0, 0.65);
+    0 8px 16px rgba(0, 0, 0, 0.92),
+    inset 0 2px 3px rgba(255, 255, 255, 0.16);
   pointer-events: none;
 }
 
 .dial-cap {
   position: absolute;
-  inset: 5.5px;
+  inset: 6px;
   border-radius: 50%;
   background:
-    /* Machined radial lathe rings + worn satin thumb center */
-    repeating-radial-gradient(
-      circle at 50% 50%,
-      rgba(255, 255, 255, 0.035) 0px,
-      rgba(255, 255, 255, 0.035) 1px,
-      transparent 1px,
-      transparent 3px
-    ),
-    radial-gradient(circle at 44% 40%, rgba(255, 255, 255, 0.13) 0%, transparent 44%),
-    radial-gradient(circle at 35% 28%, #2e323d 0%, #171920 48%, #07080b 100%);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+    radial-gradient(circle at 38% 30%, #2d313b 0%, #171920 52%, #0c0d11 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
   box-shadow:
-    inset 0 1.5px 2px rgba(255, 255, 255, 0.2),
+    inset 0 2px 3px rgba(255, 255, 255, 0.16),
     inset 0 -3px 6px rgba(0, 0, 0, 0.9);
   pointer-events: none;
-}
-
-:root[data-theme="glass"] .dial-knurl {
-  inset: 0;
-  background: radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.08) 46%, rgba(0, 0, 0, 0.42));
-}
-
-:root[data-theme="glass"] .dial-cap {
-  inset: 4px;
-  background: rgba(255, 255, 255, 0.06);
 }
 
 .dial-rotor {
   position: absolute;
   inset: 0;
-  transition: transform 0.06s linear;
-  will-change: transform;
+  transition: transform 0.06s ease-out;
   pointer-events: none;
 }
 
 .dial-needle {
   position: absolute;
   left: 50%;
-  top: 9px;
-  width: 4px;
-  height: 19px;
-  margin-left: -2px;
-  border-radius: 3px;
-  background: linear-gradient(180deg, #efe9d6 0%, #bdb394 100%);
+  top: 7px;
+  width: 4.5px;
+  height: 11px;
+  margin-left: -2.25px;
+  border-radius: 1.5px;
+  background: #ffffff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.45), 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+
+/* Circular Mode Keys Around Selector Dial */
+.arc-mode-btn {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, #1d2029 0%, #111319 100%);
+  color: var(--sgu-label, #f4cc2a);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: transform 0.06s ease, border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+  touch-action: manipulation;
+}
+.arc-mode-btn:active {
+  transform: scale(0.94);
+}
+.arc-mode-btn.active {
+  background: linear-gradient(180deg, #423414 0%, #241c09 100%);
+  border-color: var(--sgu-line, #e9be18);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(233, 190, 24, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+/* ============================================================
+   Recessed RJ45 Microphone Socket (Bottom-Left of 7007)
+   ============================================================ */
+.mic-socket {
+  width: 82px;
+  height: 58px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #0b0c10 0%, #151820 100%);
+  border: 2px solid #353a47;
   box-shadow:
-    0 0 6px rgba(243, 238, 221, 0.28),
-    0 1px 2px rgba(0, 0, 0, 0.85);
+    inset 0 6px 12px rgba(0, 0, 0, 0.96),
+    0 3px 8px rgba(0, 0, 0, 0.65);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 5px;
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.12s ease, transform 0.06s ease, box-shadow 0.12s ease;
+}
+.mic-socket:active,
+.mic-socket.pressed {
+  transform: scale(0.96);
+  border-color: #ff495c;
+  box-shadow:
+    inset 0 6px 12px rgba(0, 0, 0, 0.96),
+    0 0 16px rgba(255, 59, 78, 0.45);
+}
+.mic-socket-pins {
+  display: flex;
+  gap: 3.5px;
+  align-items: flex-start;
+  background: #050608;
+  padding: 3px 6px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.mic-socket-pins span {
+  width: 2.5px;
+  height: 11px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, #e5a942 0%, #996215 100%);
 }
 
-:root[data-theme="glass"] .dial-needle {
-  background: var(--acc);
-  box-shadow: 0 0 10px var(--acc);
-}
-
-/* Hardware & Glass Tactile Molded Keys */
-.siren-btn {
-  font-family: "Oswald", "IBM Plex Sans", sans-serif;
-  border: 1px solid #2b2f3b;
-  border-bottom: 2px solid #060709;
+/* ============================================================
+   Signature Stepped Yellow Border + Chunky White 3D Silicone Keys
+   ============================================================ */
+.hw-white-key {
+  width: 100%;
+  min-height: 54px;
+  border-radius: 8px;
+  border-top: 2px solid #ffffff;
+  border-left: 2px solid #dcdcd8;
+  border-right: 2px solid #ccccc6;
+  border-bottom: 5px solid #8f8f88;
   background:
-    radial-gradient(ellipse at 50% 42%, rgba(255, 255, 255, 0.08) 0%, transparent 58%),
-    linear-gradient(180deg, #1d2028 0%, #101217 65%, #0a0b0f 100%);
+    radial-gradient(ellipse at 50% 38%, #ffffff 0%, #f1f1ed 64%, #d9d8d2 100%);
+  color: #16171a;
+  cursor: pointer;
+  position: relative;
+  box-shadow:
+    0 5px 12px rgba(0, 0, 0, 0.85),
+    inset 0 1px 2px rgba(255, 255, 255, 0.95);
+  transition: transform 0.06s ease, border-bottom-width 0.06s ease, box-shadow 0.08s ease;
+  touch-action: manipulation;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.hw-white-key:active,
+.hw-white-key.pressed {
+  transform: translateY(2.5px);
+  border-bottom-width: 2.5px;
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.9),
+    inset 0 2px 5px rgba(0, 0, 0, 0.25);
+}
+
+.hw-white-key.man-lit {
+  background: radial-gradient(ellipse at 50% 42%, #fffbe0 0%, #fde68a 72%, #d9ab26 100%);
+  border-color: #fef08a;
+  border-bottom-color: #a16207;
+  box-shadow:
+    0 0 20px rgba(250, 204, 21, 0.55),
+    0 5px 10px rgba(0, 0, 0, 0.85);
+}
+
+.hw-white-key.horn-lit {
+  background: radial-gradient(ellipse at 50% 42%, #ffe4e6 0%, #fda4af 72%, #e11d48 100%);
+  border-color: #fecdd3;
+  border-bottom-color: #9f1239;
+  box-shadow:
+    0 0 20px rgba(244, 63, 94, 0.55),
+    0 5px 10px rgba(0, 0, 0, 0.85);
+}
+
+/* Tactile Standard Buttons (Phrases, Tabs, Modals, Settings) */
+.siren-btn {
+  border: 1px solid #353b4a;
+  border-bottom: 2.5px solid #08090c;
+  background: linear-gradient(180deg, #242833 0%, #151820 100%);
   color: var(--tx);
-  border-radius: 7px;
-  min-height: 40px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  border-radius: 10px;
+  min-height: 44px;
+  font-weight: 700;
   cursor: pointer;
   box-shadow:
-    0 4px 8px rgba(0, 0, 0, 0.72),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -2px 3px rgba(0, 0, 0, 0.75);
-  transition:
-    transform 0.08s cubic-bezier(0.16, 1, 0.3, 1),
-    background 0.16s ease,
-    border-color 0.16s ease,
-    box-shadow 0.16s ease;
+    0 3px 8px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transition: transform 0.06s ease, background 0.12s ease, border-color 0.12s ease;
   touch-action: manipulation;
-  position: relative;
-}
-
-:root[data-theme="glass"] .siren-btn {
-  font-family: "IBM Plex Sans", sans-serif;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.075);
-  border-radius: 16px;
-  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.3);
 }
 
 .siren-btn:active,
 .siren-btn.pressed {
-  transform: translateY(1.5px) scale(0.975);
+  transform: translateY(1.5px) scale(0.98);
 }
 
 .siren-btn.active {
-  background: linear-gradient(180deg, #3c2f15 0%, #1f1809 100%);
-  border-color: rgba(217, 187, 102, 0.85);
-  color: #f9e6a8;
-  box-shadow:
-    0 0 18px rgba(217, 187, 102, 0.26),
-    inset 0 1px 0 rgba(255, 232, 160, 0.35);
-}
-
-:root[data-theme="glass"] .siren-btn.active {
-  background: rgba(255, 212, 107, 0.28);
-  border-color: rgba(255, 212, 107, 0.78);
-  color: #fff6db;
-  box-shadow:
-    0 0 22px rgba(255, 212, 107, 0.36),
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.52);
+  background: linear-gradient(180deg, #423414 0%, #241c09 100%);
+  border-color: var(--sgu-line, #e9be18);
+  color: #fef08a;
+  box-shadow: 0 0 14px rgba(233, 190, 24, 0.28);
 }
 
 .siren-btn.horn-active {
-  background: linear-gradient(180deg, #4b151c 0%, #2b0b10 100%);
+  background: linear-gradient(180deg, #521820 0%, #2f0d12 100%);
   border-color: rgba(255, 79, 96, 0.88);
   color: #fff;
-  box-shadow:
-    0 0 22px rgba(255, 59, 78, 0.4),
-    inset 0 1px 0 rgba(255, 160, 170, 0.35);
+  box-shadow: 0 0 14px rgba(255, 59, 78, 0.35);
 }
 
-/* Deep Recessed 3D Silicone Rubber Wells (Real Premier Hazard 7007 MAN & HORN) */
-.key-bezel {
-  border: 1px solid rgba(204, 174, 88, 0.42);
-  border-radius: 10px;
-  padding: 4px;
-  background: linear-gradient(180deg, #050608 0%, #0d0f13 100%);
-  box-shadow:
-    inset 0 4px 8px rgba(0, 0, 0, 0.96),
-    0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-:root[data-theme="glass"] .key-bezel {
-  border: none;
-  padding: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.membrane-key {
-  width: 100%;
-  border-radius: 6px;
-  padding: 10px 6px;
-  border-top: 2px solid #f4efe0;
-  border-left: 2px solid #bfb69b;
-  border-right: 2px solid #b5ac90;
-  border-bottom: 3.5px solid #8a8066;
-  background:
-    /* Finger wear patina in center + milky backlit silicone dome */
-    radial-gradient(ellipse at 50% 62%, rgba(120, 108, 82, 0.22) 0%, transparent 45%),
-    radial-gradient(ellipse at 50% 42%, rgba(255, 249, 224, 0.94) 0%, rgba(218, 209, 182, 0.92) 64%, rgba(172, 162, 134, 0.98) 100%);
-  color: #171612;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-  box-shadow:
-    0 5px 10px rgba(0, 0, 0, 0.82),
-    inset 0 1px 2px rgba(255, 255, 255, 0.85),
-    inset 0 0 12px rgba(85, 76, 54, 0.2);
-  transition: transform 0.07s ease, box-shadow 0.12s ease, filter 0.12s ease;
-  touch-action: manipulation;
-}
-
-/* Molded inner raised rubber pad face */
-.membrane-key::after {
-  content: "";
-  position: absolute;
-  inset: 3px;
-  border-radius: 4px;
-  border: 1px solid rgba(68, 59, 41, 0.22);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
-  pointer-events: none;
-}
-
-.membrane-key:active,
-.membrane-key.pressed {
-  transform: translateY(2px) scale(0.975);
-  border-bottom-width: 2px;
-  box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.88),
-    inset 0 3px 7px rgba(0, 0, 0, 0.38);
-}
-
-.membrane-key.man-lit {
-  background:
-    radial-gradient(ellipse at 50% 50%, #fffbe0 0%, #f5d87e 70%, #d4b04e 100%);
-  border-color: #ffe89a;
-  box-shadow:
-    0 0 22px rgba(255, 208, 92, 0.52),
-    inset 0 2px 2px rgba(255, 255, 255, 0.92);
-}
-
-.membrane-key.horn-lit {
-  background:
-    radial-gradient(ellipse at 50% 50%, #ffe6e8 0%, #f29ca6 72%, #d46a76 100%);
-  border-color: #ff99a4;
-  box-shadow:
-    0 0 22px rgba(255, 59, 78, 0.52),
-    inset 0 2px 2px rgba(255, 255, 255, 0.85);
-}
-
-:root[data-theme="glass"] .membrane-key {
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
-  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.35);
-}
-
-:root[data-theme="glass"] .membrane-key.man-lit {
-  background: rgba(255, 212, 107, 0.32);
-  border-color: rgba(255, 212, 107, 0.8);
-  color: #fff6db;
-}
-
-:root[data-theme="glass"] .membrane-key.horn-lit {
-  background: rgba(255, 59, 78, 0.36);
-  border-color: rgba(255, 92, 108, 0.85);
-  color: #fff;
-}
-
-/* Stop Cutoff Switch */
 .stop-switch {
-  background: linear-gradient(180deg, #321619 0%, #210d10 100%);
-  border: 1px solid #662e34;
-  color: #f3c4c8;
-  box-shadow:
-    0 4px 10px rgba(0, 0, 0, 0.6),
-    inset 0 1px 0 rgba(255, 180, 188, 0.18);
-}
-
-.stop-switch:hover {
-  background: linear-gradient(180deg, #3f1b1f 0%, #291014 100%);
-}
-
-:root[data-theme="glass"] .stop-switch {
-  background: rgba(244, 63, 94, 0.25);
-  border-color: rgba(251, 113, 133, 0.55);
-  color: #fff;
+  background: linear-gradient(180deg, #3b171b 0%, #240c0f 100%);
+  border: 1.5px solid #7f2933;
+  color: #fecdd3;
 }
 
 /* Bottom Navigation Bar */
 .bottom-dock {
-  background: rgba(7, 8, 11, 0.94);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid #20232b;
-  box-shadow:
-    0 12px 34px rgba(0, 0, 0, 0.85),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-:root[data-theme="glass"] .bottom-dock {
-  background: rgba(255, 255, 255, 0.09);
-  backdrop-filter: blur(26px) saturate(190%);
-  -webkit-backdrop-filter: blur(26px) saturate(190%);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(12, 14, 18, 0.96);
+  border: 1px solid #262a34;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.85);
 }
 
 button:focus-visible,
@@ -700,51 +531,18 @@ input:focus-visible,
   outline-offset: 2px;
 }
 
-/* Light non-obscuring gate blur so user sees the Hazard 7007 console behind the modal */
-#app-shell {
-  transition: filter 0.3s ease;
-}
-
+/* Light non-obscuring gate blur so user sees the Hazard 7007 unit behind the Telegram modal */
 body.gated #app-shell {
   filter: blur(2px) brightness(0.84);
   pointer-events: none;
   user-select: none;
 }
 
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  .bg-mesh i,
-  body.siren-active .bg-mesh i {
-    animation: none !important;
-  }
-  .flash-overlay.r,
-  .flash-overlay.w,
-  .flash-overlay.a {
-    animation: none !important;
-    opacity: 0.35 !important;
-  }
-  .flash-overlay.r {
-    background: linear-gradient(90deg, rgba(255, 0, 32, 0.35), rgba(0, 72, 255, 0.35));
-  }
-  .flash-overlay.w {
-    background: rgba(255, 255, 255, 0.25);
-  }
-  .flash-overlay.a {
-    background: rgba(255, 174, 0, 0.35);
-  }
-}
-
-/* Compact 320px tweaks (~10% smaller) */
-@media (max-width: 360px) {
-  .dial-stage {
-    width: 86px;
-    height: 86px;
-  }
-  .dial {
-    width: 68px;
-    height: 68px;
-  }
-  .dial-tick {
-    transform-origin: 50% 41px;
-  }
+@media (max-width: 380px) {
+  .mounting-ear { display: none; }
+  .dial-stage.dial-sm { width: 72px; height: 72px; }
+  .dial.dial-sm { width: 58px; height: 58px; }
+  .dial-stage.dial-lg { width: 82px; height: 82px; }
+  .dial.dial-lg { width: 74px; height: 74px; }
+  .dial-tick { transform-origin: 50% 34px; }
 }
