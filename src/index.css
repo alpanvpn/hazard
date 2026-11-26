@@ -132,109 +132,27 @@ body.siren-active .bg-mesh::after {
 }
 
 /* ============================================================
-   Authentic Molded ABS Hardware Box (matches Premier Hazard 7007 photo)
+   Clean Tactical SGU Console Card (No Boxy Chassis / No Scratches)
    ============================================================ */
-.sgu-chassis-wrap {
+.console-card {
   position: relative;
-}
-
-:root[data-theme="hardware"] .sgu-chassis {
-  position: relative;
-  border-radius: 14px;
-  padding: 9px;
-  /* Textured matte stippled black ABS plastic look */
+  border-radius: var(--radius-card);
+  border: 1.5px solid color-mix(in srgb, var(--sgu-line, #e9be18) 55%, rgba(255, 255, 255, 0.14));
   background:
-    radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 0) 0 0 / 4px 4px,
-    radial-gradient(rgba(0, 0, 0, 0.35) 1px, transparent 0) 2px 2px / 4px 4px,
-    linear-gradient(175deg, #24272f 0%, #17191f 25%, #111318 80%, #1b1d24 100%);
-  border: 1.5px solid #353944;
+    radial-gradient(ellipse 75% 45% at 50% 0%, rgba(255, 255, 255, 0.045) 0%, transparent 65%),
+    linear-gradient(180deg, #161921 0%, #0f1116 60%, #0c0e13 100%);
   box-shadow:
-    0 18px 42px rgba(0, 0, 0, 0.9),
-    inset 0 1.5px 0 rgba(255, 255, 255, 0.16),
-    inset 0 -3px 6px rgba(0, 0, 0, 0.9);
+    0 18px 40px rgba(0, 0, 0, 0.78),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-:root[data-theme="glass"] .sgu-chassis {
-  position: relative;
-  border-radius: 22px;
-  padding: 10px;
+:root[data-theme="glass"] .console-card {
   background: var(--surface);
-  border: 1px solid var(--surface-border);
+  border-color: color-mix(in srgb, var(--sgu-line, #e9be18) 65%, rgba(255, 255, 255, 0.25));
   box-shadow: var(--surface-shadow);
 }
 
-/* Signature Molded Side Mounting Ears (hidden only on tiny screens if crowded, visible >=380px) */
-:root[data-theme="hardware"] .mounting-ear {
-  position: absolute;
-  top: 52%;
-  width: 12px;
-  height: 52px;
-  transform: translateY(-50%);
-  background: linear-gradient(180deg, #23262e 0%, #14161c 100%);
-  border: 1px solid #323640;
-  pointer-events: none;
-}
-:root[data-theme="hardware"] .mounting-ear-left {
-  left: -10px;
-  border-radius: 6px 0 0 6px;
-  box-shadow: inset 2px 0 3px rgba(0, 0, 0, 0.7), -3px 4px 10px rgba(0, 0, 0, 0.7);
-}
-:root[data-theme="hardware"] .mounting-ear-right {
-  right: -10px;
-  border-radius: 0 6px 6px 0;
-  box-shadow: inset -2px 0 3px rgba(0, 0, 0, 0.7), 3px 4px 10px rgba(0, 0, 0, 0.7);
-}
-:root[data-theme="hardware"] .mounting-ear::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 6px;
-  height: 16px;
-  transform: translate(-50%, -50%);
-  border-radius: 99px;
-  background: #07080b;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-/* Inner Yellow / SGU Colored Silkscreen Outline Box */
-:root[data-theme="hardware"] .sgu-faceplate {
-  position: relative;
-  border: 2px solid var(--sgu-line, #e9be18);
-  border-radius: 7px;
-  padding: 10px 10px 11px;
-  background:
-    radial-gradient(ellipse at 18% 12%, rgba(255, 255, 255, 0.045) 0%, transparent 45%),
-    linear-gradient(180deg, #16181e 0%, #101216 55%, #0b0d10 100%);
-  box-shadow:
-    inset 0 2px 6px rgba(0, 0, 0, 0.7),
-    0 1px 0 rgba(0, 0, 0, 0.8);
-}
-
-:root[data-theme="glass"] .sgu-faceplate {
-  position: relative;
-  border: 1.5px solid var(--sgu-line, #e9be18);
-  border-radius: 16px;
-  padding: 10px;
-  background: rgba(8, 10, 16, 0.45);
-}
-
-/* SGU System Variants subtle faceplate accents */
-:root[data-theme="hardware"] [data-sgu="grach"] .sgu-faceplate {
-  background:
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.015) 0 1px, transparent 1px 3px),
-    linear-gradient(180deg, #1b1a1f 0%, #111115 100%);
-}
-:root[data-theme="hardware"] [data-sgu="elina"] .sgu-faceplate {
-  background:
-    linear-gradient(180deg, #101724 0%, #0b0f17 100%);
-}
-:root[data-theme="hardware"] [data-sgu="bars"] .sgu-faceplate {
-  background:
-    linear-gradient(180deg, #191614 0%, #0f0d0c 100%);
-}
-
-/* Double-lined silkscreen logo box ("PREMIER HAZARD" / "ЭЛЕКТ ГРАЧ" etc.) */
+/* Manufacturer badge ("PREMIER HAZARD" / "ЭЛЕКТ ГРАЧ" etc.) */
 .hazard-badge {
   display: inline-flex;
   flex-direction: column;
@@ -242,14 +160,13 @@ body.siren-active .bg-mesh::after {
   justify-content: center;
   padding: 4px 8px;
   border: 1.5px solid var(--sgu-line, #e9be18);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5);
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.45);
   line-height: 1.1;
-  border-radius: 3px;
+  border-radius: 5px;
 }
 
 /* ============================================================
-   Authentic Ribbed Fluted Rotary Knobs (OFF/VOL + Circular Mode Dial)
+   Crisp Fluted Rotary Knobs (ГРОМКОСТЬ + РЕЖИМ)
    ============================================================ */
 .dial-stage {
   position: relative;
@@ -257,8 +174,8 @@ body.siren-active .bg-mesh::after {
   align-items: center;
   justify-content: center;
 }
-.dial-stage.dial-sm { width: 80px; height: 80px; }
-.dial-stage.dial-lg { width: 72px; height: 72px; }
+.dial-stage.dial-sm { width: 92px; height: 92px; }
+.dial-stage.dial-lg { width: 92px; height: 92px; }
 
 .dial-ticks {
   position: absolute;
@@ -270,15 +187,16 @@ body.siren-active .bg-mesh::after {
   position: absolute;
   left: 50%;
   top: 2px;
-  width: 2px;
-  height: 4px;
-  margin-left: -1px;
-  background: rgba(255, 255, 255, 0.28);
-  transform-origin: 50% 38px;
-  border-radius: 1px;
+  width: 2.5px;
+  height: 5px;
+  margin-left: -1.25px;
+  background: rgba(255, 255, 255, 0.24);
+  transform-origin: 50% 44px;
+  border-radius: 1.5px;
 }
 .dial-tick.lit {
   background: var(--sgu-line, #e9be18);
+  box-shadow: 0 0 6px rgba(233, 190, 24, 0.45);
 }
 
 .dial {
@@ -288,26 +206,26 @@ body.siren-active .bg-mesh::after {
   cursor: grab;
   background: #0a0b0e;
   box-shadow:
-    0 8px 16px rgba(0, 0, 0, 0.92),
-    0 2px 4px rgba(0, 0, 0, 0.7);
+    0 10px 20px rgba(0, 0, 0, 0.85),
+    0 2px 5px rgba(0, 0, 0, 0.65);
 }
-.dial.dial-sm { width: 62px; height: 62px; }
-.dial.dial-lg { width: 68px; height: 68px; }
+.dial.dial-sm { width: 72px; height: 72px; }
+.dial.dial-lg { width: 72px; height: 72px; }
 .dial:active { cursor: grabbing; }
 
 .dial-knurl {
   position: absolute;
-  inset: -4px;
+  inset: -3px;
   border-radius: 50%;
   background: repeating-conic-gradient(
     from -3deg,
-    #323743 0deg 8deg,
-    #0b0c10 8deg 22.5deg
+    #313643 0deg 8deg,
+    #0d0f14 8deg 20deg
   );
-  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  border: 1.5px solid rgba(255, 255, 255, 0.16);
   box-shadow:
-    0 8px 16px rgba(0, 0, 0, 0.92),
-    inset 0 2px 3px rgba(255, 255, 255, 0.16);
+    0 8px 16px rgba(0, 0, 0, 0.85),
+    inset 0 2px 3px rgba(255, 255, 255, 0.14);
   pointer-events: none;
 }
 
@@ -316,11 +234,11 @@ body.siren-active .bg-mesh::after {
   inset: 6px;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 38% 30%, #2d313b 0%, #171920 52%, #0c0d11 100%);
-  border: 1.5px solid rgba(255, 255, 255, 0.14);
+    radial-gradient(circle at 38% 30%, #2a2f3a 0%, #161820 55%, #0c0d12 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow:
-    inset 0 2px 3px rgba(255, 255, 255, 0.16),
-    inset 0 -3px 6px rgba(0, 0, 0, 0.9);
+    inset 0 2px 3px rgba(255, 255, 255, 0.14),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.85);
   pointer-events: none;
 }
 
@@ -334,158 +252,80 @@ body.siren-active .bg-mesh::after {
 .dial-needle {
   position: absolute;
   left: 50%;
-  top: 7px;
-  width: 4.5px;
-  height: 11px;
-  margin-left: -2.25px;
-  border-radius: 1.5px;
+  top: 8px;
+  width: 4px;
+  height: 12px;
+  margin-left: -2px;
+  border-radius: 2px;
   background: #ffffff;
   box-shadow: 0 0 6px rgba(255, 255, 255, 0.45), 0 1px 2px rgba(0, 0, 0, 0.85);
 }
 
-/* Circular Mode Keys Around Selector Dial */
-.arc-mode-btn {
-  position: absolute;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-height: 28px;
-  padding: 3px 7px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: linear-gradient(180deg, #1d2029 0%, #111319 100%);
-  color: var(--sgu-label, #f4cc2a);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  transition: transform 0.06s ease, border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
-  touch-action: manipulation;
-}
-.arc-mode-btn:active {
-  transform: scale(0.94);
-}
-.arc-mode-btn.active {
-  background: linear-gradient(180deg, #423414 0%, #241c09 100%);
-  border-color: var(--sgu-line, #e9be18);
-  color: #ffffff;
-  box-shadow: 0 0 12px rgba(233, 190, 24, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
-}
-
-/* ============================================================
-   Recessed RJ45 Microphone Socket (Bottom-Left of 7007)
-   ============================================================ */
-.mic-socket {
-  width: 82px;
-  height: 58px;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #0b0c10 0%, #151820 100%);
-  border: 2px solid #353a47;
-  box-shadow:
-    inset 0 6px 12px rgba(0, 0, 0, 0.96),
-    0 3px 8px rgba(0, 0, 0, 0.65);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 8px 5px;
-  cursor: pointer;
-  position: relative;
-  transition: border-color 0.12s ease, transform 0.06s ease, box-shadow 0.12s ease;
-}
-.mic-socket:active,
-.mic-socket.pressed {
-  transform: scale(0.96);
-  border-color: #ff495c;
-  box-shadow:
-    inset 0 6px 12px rgba(0, 0, 0, 0.96),
-    0 0 16px rgba(255, 59, 78, 0.45);
-}
-.mic-socket-pins {
-  display: flex;
-  gap: 3.5px;
-  align-items: flex-start;
-  background: #050608;
-  padding: 3px 6px 5px;
-  border-radius: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-.mic-socket-pins span {
-  width: 2.5px;
-  height: 11px;
-  border-radius: 1px;
-  background: linear-gradient(180deg, #e5a942 0%, #996215 100%);
-}
-
-/* ============================================================
-   Signature Stepped Yellow Border + Chunky White 3D Silicone Keys
-   ============================================================ */
-.hw-white-key {
+/* Primary Console Action Keys (MAN / HORN) */
+.console-key {
   width: 100%;
-  min-height: 54px;
-  border-radius: 8px;
-  border-top: 2px solid #ffffff;
-  border-left: 2px solid #dcdcd8;
-  border-right: 2px solid #ccccc6;
-  border-bottom: 5px solid #8f8f88;
-  background:
-    radial-gradient(ellipse at 50% 38%, #ffffff 0%, #f1f1ed 64%, #d9d8d2 100%);
-  color: #16171a;
+  min-height: 76px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  border-bottom: 4px solid #090b0f;
+  background: linear-gradient(180deg, #272b36 0%, #171a22 100%);
+  color: #f8fafc;
   cursor: pointer;
   position: relative;
   box-shadow:
-    0 5px 12px rgba(0, 0, 0, 0.85),
-    inset 0 1px 2px rgba(255, 255, 255, 0.95);
-  transition: transform 0.06s ease, border-bottom-width 0.06s ease, box-shadow 0.08s ease;
+    0 6px 16px rgba(0, 0, 0, 0.68),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  transition: transform 0.06s ease, border-bottom-width 0.06s ease, box-shadow 0.08s ease, background 0.1s ease;
   touch-action: manipulation;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
 }
 
-.hw-white-key:active,
-.hw-white-key.pressed {
-  transform: translateY(2.5px);
-  border-bottom-width: 2.5px;
+.console-key:active,
+.console-key.pressed {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
   box-shadow:
-    0 2px 5px rgba(0, 0, 0, 0.9),
-    inset 0 2px 5px rgba(0, 0, 0, 0.25);
+    0 2px 6px rgba(0, 0, 0, 0.8),
+    inset 0 2px 5px rgba(0, 0, 0, 0.35);
 }
 
-.hw-white-key.man-lit {
-  background: radial-gradient(ellipse at 50% 42%, #fffbe0 0%, #fde68a 72%, #d9ab26 100%);
-  border-color: #fef08a;
-  border-bottom-color: #a16207;
+.console-key.man-lit {
+  background: linear-gradient(180deg, #524112 0%, #2d2207 100%);
+  border-color: var(--sgu-line, #e9be18);
+  border-bottom-color: #6b4e09;
+  color: #fef3c7;
   box-shadow:
-    0 0 20px rgba(250, 204, 21, 0.55),
-    0 5px 10px rgba(0, 0, 0, 0.85);
+    0 0 22px rgba(233, 190, 24, 0.38),
+    0 6px 14px rgba(0, 0, 0, 0.72);
 }
 
-.hw-white-key.horn-lit {
-  background: radial-gradient(ellipse at 50% 42%, #ffe4e6 0%, #fda4af 72%, #e11d48 100%);
-  border-color: #fecdd3;
-  border-bottom-color: #9f1239;
+.console-key.horn-lit {
+  background: linear-gradient(180deg, #6b1925 0%, #3b0b13 100%);
+  border-color: #fb7185;
+  border-bottom-color: #7f1d1d;
+  color: #ffe4e6;
   box-shadow:
-    0 0 20px rgba(244, 63, 94, 0.55),
-    0 5px 10px rgba(0, 0, 0, 0.85);
+    0 0 22px rgba(244, 63, 94, 0.42),
+    0 6px 14px rgba(0, 0, 0, 0.72);
 }
 
-/* Tactile Standard Buttons (Phrases, Tabs, Modals, Settings) */
+/* Tactile Standard Buttons (Mode Grid, Phrases, Tabs, Modals, Settings) */
 .siren-btn {
   border: 1px solid #353b4a;
   border-bottom: 2.5px solid #08090c;
   background: linear-gradient(180deg, #242833 0%, #151820 100%);
   color: var(--tx);
-  border-radius: 10px;
+  border-radius: 11px;
   min-height: 44px;
   font-weight: 700;
   cursor: pointer;
   box-shadow:
-    0 3px 8px rgba(0, 0, 0, 0.55),
+    0 3px 8px rgba(0, 0, 0, 0.52),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transition: transform 0.06s ease, background 0.12s ease, border-color 0.12s ease;
   touch-action: manipulation;
@@ -493,7 +333,7 @@ body.siren-active .bg-mesh::after {
 
 .siren-btn:active,
 .siren-btn.pressed {
-  transform: translateY(1.5px) scale(0.98);
+  transform: translateY(1.5px) scale(0.985);
 }
 
 .siren-btn.active {
@@ -511,9 +351,13 @@ body.siren-active .bg-mesh::after {
 }
 
 .stop-switch {
-  background: linear-gradient(180deg, #3b171b 0%, #240c0f 100%);
-  border: 1.5px solid #7f2933;
-  color: #fecdd3;
+  background: linear-gradient(180deg, #5c1922 0%, #310d12 58%, #21080c 100%);
+  border: 1.5px solid #a63444;
+  border-bottom: 3.5px solid #160407;
+  color: #ffe4e6;
+  box-shadow:
+    0 4px 12px rgba(127, 29, 29, 0.45),
+    inset 0 1px 0 rgba(255, 200, 205, 0.24);
 }
 
 /* Bottom Navigation Bar */
@@ -531,7 +375,7 @@ input:focus-visible,
   outline-offset: 2px;
 }
 
-/* Light non-obscuring gate blur so user sees the Hazard 7007 unit behind the Telegram modal */
+/* Light non-obscuring gate blur so user sees the console behind the Telegram modal */
 body.gated #app-shell {
   filter: blur(2px) brightness(0.84);
   pointer-events: none;
@@ -539,10 +383,11 @@ body.gated #app-shell {
 }
 
 @media (max-width: 380px) {
-  .mounting-ear { display: none; }
-  .dial-stage.dial-sm { width: 72px; height: 72px; }
-  .dial.dial-sm { width: 58px; height: 58px; }
+  .dial-stage.dial-sm,
   .dial-stage.dial-lg { width: 82px; height: 82px; }
-  .dial.dial-lg { width: 74px; height: 74px; }
-  .dial-tick { transform-origin: 50% 34px; }
+  .dial.dial-sm,
+  .dial.dial-lg { width: 64px; height: 64px; }
+  .dial-tick { transform-origin: 50% 39px; }
+  .console-key { min-height: 68px; }
 }
+

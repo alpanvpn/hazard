@@ -8,6 +8,7 @@ import {
   Lightbulb,
   Lock,
   Megaphone,
+  Mic,
   MicOff,
   Power,
   Radio,
@@ -15,7 +16,6 @@ import {
   Sliders,
   SlidersHorizontal,
   Trash2,
-  Volume2,
   Waves,
   X,
 } from 'lucide-react';
@@ -45,7 +45,7 @@ const MODE_LABELS: Record<SirenMode, string> = {
   wail: 'WAIL',
   pa: 'PA',
   radio: 'RADIO',
-  phaser: 'PHASER',
+  phaser: 'PULSAR',
   piercer: 'PIERCER',
   rumbler: 'ТРИТОН',
   usa: 'МЕГА-МИКС',
@@ -76,24 +76,62 @@ const DPS_PHRASES: { id: PhraseId; label: string; full: string }[] = [
   { id: 'obochina', label: 'К обочине!', full: 'К обочине прижимаемся!' },
   { id: 'vpravo_stop', label: 'Вправо, стоп!', full: 'Вправо прижимаемся, останавливаемся!' },
   { id: 'prizhatsa', label: 'Прижаться!', full: 'Вправо прижаться, остановиться!' },
-  { id: 'ostanavlivaemsya', label: 'Остановка!', full: 'Останавливаемся!' },
+  { id: 'ostanavlivaemsya', label: 'Остановка!', full: 'Останавливайся, разобьёшься!' },
   { id: 'strelyat', label: 'Стрелять!', full: 'Останавливаемся, стрелять будем!' },
+  { id: 'voditel_stop', label: 'Водитель, стоп!', full: 'Водитель! Остановите транспортное средство!' },
 ];
+
+const readCookie = (key: string): string | null => {
+  try {
+    const prefix = `${encodeURIComponent(key)}=`;
+    for (const part of document.cookie.split(';')) {
+      const trimmed = part.trim();
+      if (trimmed.startsWith(prefix)) {
+        return decodeURIComponent(trimmed.slice(prefix.length));
+      }
+    }
+  } catch {
+    // Ignore cookie errors
+  }
+  return null;
+};
+
+const writeCookie = (key: string, val: string): void => {
+  try {
+    document.cookie = `${encodeURIComponent(key)}=${encodeURIComponent(val)}; Max-Age=31536000; path=/; SameSite=Lax`;
+  } catch {
+    // Ignore cookie errors
+  }
+};
 
 const storage = {
   get(key: string): string | null {
     try {
-      return window.localStorage.getItem(key);
+      const ls = window.localStorage.getItem(key);
+      if (ls !== null) return ls;
     } catch {
-      return null;
+      // Ignore storage restrictions
     }
+    try {
+      const ss = window.sessionStorage.getItem(key);
+      if (ss !== null) return ss;
+    } catch {
+      // Ignore
+    }
+    return readCookie(key);
   },
   set(key: string, val: string): void {
     try {
       window.localStorage.setItem(key, val);
     } catch {
-      // Ignore storage quota / private mode restrictions
+      // Ignore
     }
+    try {
+      window.sessionStorage.setItem(key, val);
+    } catch {
+      // Ignore
+    }
+    writeCookie(key, val);
   },
 };
 
@@ -164,11 +202,12 @@ async function sha256Hex(text: string): Promise<string> {
 
 export default function App() {
   const [gateOpen, setGateOpen] = useState<boolean>(false);
-  const [botClicked, setBotClicked] = useState(false);
+  const [botClicked, setBotClicked] = useState<boolean>(() => Boolean(storage.get('alpan_bot_ts')));
   const [gateCountdown, setGateCountdown] = useState<number>(0);
 
   const [proUnlocked, setProUnlocked] = useState<boolean>(() => storage.get('alpan_pro') === '1');
   const [lockModalOpen, setLockModalOpen] = useState(false);
+  const [lockTargetSection, setLockTargetSection] = useState<'СГУ' | 'Свет' | 'FX' | null>(null);
   const [codeInput, setCodeInput] = useState('');
   const [codeError, setCodeError] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
@@ -188,9 +227,10 @@ export default function App() {
   const [strobeAcknowledged, setStrobeAcknowledged] = useState(false);
 
   const [volume, setVolume] = useState(1.0);
+  const [fxBoost, setFxBoost] = useState(1.0);
   const [echoVal, setEchoVal] = useState(0);
   const [tunnelVal, setTunnelVal] = useState(0);
-  const [toneVal, setToneVal] = useState(4800);
+  const [toneVal, setToneVal] = useState(6000);
 
   const [manSiren, setManSiren] = useState<ManSirenBehavior>(() =>
     storage.get('alpan_man_mode') === 'toggle' ? 'toggle' : 'hold'
@@ -218,7 +258,6 @@ export default function App() {
 
   const [micWarningOpen, setMicWarningOpen] = useState(false);
   const [micConfirmed, setMicConfirmed] = useState(false);
-  const [micPendingAction, setMicPendingAction] = useState<'pa' | 'ptt' | null>(null);
   const [micStatusMsg, setMicStatusMsg] = useState('');
   const [radioError, setRadioError] = useState('');
   const [singleCopied, setSingleCopied] = useState(false);
@@ -308,13 +347,51 @@ export default function App() {
     document.body.classList.toggle('gated', gateOpen);
   }, [gateOpen]);
 
-  // Show Telegram bot gate after 3.5s so user sees the real console first
+  // Show Telegram bot gate after 3.5s ONLY if user hasn't already visited bot or confirmed
   useEffect(() => {
-    if (storage.get('alpan_ok') === '1') return;
+    const syncGateFromStorage = () => {
+      if (storage.get('alpan_ok') === '1') {
+        setGateOpen(false);
+        return true;
+      }
+      const botTsRaw = storage.get('alpan_bot_ts');
+      if (botTsRaw) {
+        const elapsed = Date.now() - Number(botTsRaw);
+        if (Number.isFinite(elapsed) && elapsed >= 4000) {
+          // User already went to Telegram bot and returned -> never re-lock them out
+          storage.set('alpan_ok', '1');
+          setGateOpen(false);
+          return true;
+        }
+        setBotClicked(true);
+        setGateCountdown(Math.max(1, Math.ceil((4000 - Math.max(0, elapsed)) / 1000)));
+      }
+      return false;
+    };
+
+    if (syncGateFromStorage()) return;
+
     const timer = window.setTimeout(() => {
-      setGateOpen(true);
+      if (!syncGateFromStorage()) {
+        setGateOpen(true);
+      }
     }, 3500);
-    return () => window.clearTimeout(timer);
+
+    const onReturn = () => {
+      if (document.visibilityState === 'visible') {
+        syncGateFromStorage();
+      }
+    };
+    document.addEventListener('visibilitychange', onReturn);
+    window.addEventListener('pageshow', onReturn);
+    window.addEventListener('focus', onReturn);
+
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onReturn);
+      window.removeEventListener('pageshow', onReturn);
+      window.removeEventListener('focus', onReturn);
+    };
   }, []);
 
   const isSirenSounding = useMemo(
@@ -356,9 +433,7 @@ export default function App() {
       if (pttPointerRef.current !== null) {
         pttPointerRef.current = null;
         setPttPressed(false);
-        if (engineRef.current?.getSnapshot().mode !== 'pa') {
-          engineRef.current?.stopMic();
-        }
+        engineRef.current?.stopMic();
       }
     };
     window.addEventListener('pointerup', releaseAllHeld);
@@ -372,9 +447,10 @@ export default function App() {
   }, []);
 
   const handleBotClick = () => {
+    storage.set('alpan_bot_ts', String(Date.now()));
     if (!botClicked) {
       setBotClicked(true);
-      setGateCountdown(5);
+      setGateCountdown(4);
     }
   };
 
@@ -418,9 +494,15 @@ export default function App() {
     }
   };
 
+  const openLockModalFor = (section: 'СГУ' | 'Свет' | 'FX' | null) => {
+    setLockTargetSection(section);
+    setLockModalOpen(true);
+  };
+
   const handleTabSelect = (tab: TabId, isPro = false) => {
     if (isPro && !proUnlocked) {
-      setLockModalOpen(true);
+      const sec = tab === 'modes' ? 'СГУ' : tab === 'light' ? 'Свет' : 'FX';
+      openLockModalFor(sec);
       triggerHaptic(12);
       return;
     }
@@ -430,7 +512,7 @@ export default function App() {
 
   const handleSelectSguSystem = (id: SguSystemId) => {
     if (!proUnlocked && id !== 'hazard') {
-      setLockModalOpen(true);
+      openLockModalFor('СГУ');
       return;
     }
     triggerHaptic(14);
@@ -454,34 +536,9 @@ export default function App() {
     }
   };
 
-  const activatePA = useCallback(async () => {
-    setMicStatusMsg('');
-    void engineRef.current?.setMode('pa');
-    const ok = await engineRef.current?.startMic();
-    if (!ok) {
-      setMicStatusMsg('Доступ к микрофону запрещён в браузере.');
-    }
-  }, []);
-
   const handleSelectMode = (mode: SirenMode) => {
     triggerHaptic(10);
-    if (mode === 'pa') {
-      if (engineSnap.mode === 'pa' && engineSnap.powered) {
-        engineRef.current?.stopMic();
-        void engineRef.current?.setMode('standby');
-        return;
-      }
-      if (!micConfirmed) {
-        setMicPendingAction('pa');
-        setMicWarningOpen(true);
-        return;
-      }
-      void activatePA();
-      return;
-    }
-    if (engineSnap.mode === 'pa') {
-      engineRef.current?.stopMic();
-    }
+    // PA activates cleanly without blocking mic prompt (PTT handles live mic), matching video PA+MAN behavior
     void engineRef.current?.setMode(mode);
   };
 
@@ -568,7 +625,6 @@ export default function App() {
   const onPttDown = async (e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
     if (!micConfirmed) {
-      setMicPendingAction('ptt');
       setMicWarningOpen(true);
       return;
     }
@@ -590,9 +646,7 @@ export default function App() {
     if (pttPointerRef.current !== e.pointerId && pttPointerRef.current !== null) return;
     pttPointerRef.current = null;
     setPttPressed(false);
-    if (engineRef.current?.getSnapshot().mode !== 'pa') {
-      engineRef.current?.stopMic();
-    }
+    engineRef.current?.stopMic();
   };
 
   const handleStopAll = () => {
@@ -664,14 +718,20 @@ export default function App() {
     if (engineSnap.wolfActive) {
       return { title: 'ВОЛК', subtitle: sguSpec.shortName };
     }
-    if (pttPressed || engineSnap.mode === 'pa') {
-      return { title: 'ЭФИР (PA)', subtitle: 'ГРОМКАЯ СВЯЗЬ' };
+    if (pttPressed) {
+      return { title: 'PTT · МИКР', subtitle: 'ГРОМКАЯ СВЯЗЬ' };
+    }
+    if (engineSnap.mode === 'pa') {
+      return { title: 'PA', subtitle: manPressed ? 'ТРЕЛЬ MAN' : sguSpec.shortName };
     }
     if (engineSnap.altActive && altTargetMode) {
       return { title: MODE_LABELS[altTargetMode], subtitle: `${sguSpec.manLabel} · СМЕНА` };
     }
     if (manPressed && (engineSnap.mode === 'standby' || engineSnap.mode === 'radio')) {
-      return { title: 'РУЧНАЯ', subtitle: sguSpec.shortName };
+      return {
+        title: sguSystem === 'hazard' ? 'WAIL' : 'РУЧНАЯ',
+        subtitle: `${sguSpec.shortName} · ${sguSpec.manLabel}`,
+      };
     }
     if (activePhraseMeta && engineSnap.mode === 'standby') {
       return { title: 'ГОЛОС СГУ', subtitle: activePhraseMeta.label.toUpperCase() };
@@ -685,13 +745,16 @@ export default function App() {
       title: foundLabel,
       subtitle: engineSnap.mode === 'standby' ? `${sguSpec.shortName} · ГОТОВ` : `${sguSpec.shortName} · АКТИВНО`,
     };
-  }, [engineSnap, hornPressed, manPressed, pttPressed, altTargetMode, activePhraseMeta, sguSpec]);
+  }, [engineSnap, hornPressed, manPressed, pttPressed, altTargetMode, activePhraseMeta, sguSpec, sguSystem]);
 
   const manIsLit = manPressed || (engineSnap.powered && (engineSnap.altActive || engineSnap.wolfActive));
   const hornIsLit = hornPressed || engineSnap.hornActive;
 
-  // Circular positions matching -125°, -75°, -25°, +25°, +75°, +125° around knob center (112, 98)
-  const ARC_ANGLES = [-125, -75, -25, 25, 75, 125] as const;
+  // Ergonomic 3x2 mode grid order: Top row = 3 primary sirens (indices 1,2,3), Bottom row = Standby/PA/Radio (0,4,5)
+  const gridModes = useMemo(
+    () => [1, 2, 3, 0, 4, 5].map((i) => sguSpec.modes[i]).filter(Boolean),
+    [sguSpec]
+  );
 
   return (
     <>
@@ -797,253 +860,204 @@ export default function App() {
               </div>
             </div>
 
-            {/* Authentic Compact Premier Hazard 7007 (or Selected SGU) Molded ABS Box */}
-            <div className="sgu-chassis-wrap px-0 sm:px-2">
-              <div className="mounting-ear mounting-ear-left" aria-hidden="true" />
-              <div className="mounting-ear mounting-ear-right" aria-hidden="true" />
+            {/* Clean Ergonomic SGU Console Card (Zero Boxy Clutter / Zero Scratches) */}
+            <div className="console-card p-3.5 sm:p-4 space-y-3">
+              {/* Top Brand Row: [PREMIER HAZARD] · Flags + Link · [7007] */}
+              <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-white/10">
+                <div className="hazard-badge shrink-0">
+                  <span
+                    className="text-[8.5px] font-extrabold tracking-[0.18em]"
+                    style={{ color: sguSpec.accentColor }}
+                  >
+                    {sguSpec.brandTop}
+                  </span>
+                  <span
+                    className="text-xs font-extrabold tracking-[0.12em]"
+                    style={{ color: sguSpec.accentColor }}
+                  >
+                    {sguSpec.brandBottom}
+                  </span>
+                </div>
 
-              <div className="sgu-chassis">
-                <div className="sgu-faceplate">
-                  {/* TOP SECTION: OFF/VOL Knob (Left) + True Circular 6-Mode Selector Dial (Right) */}
-                  <div className="grid grid-cols-[29%_71%] gap-1 items-center pb-1.5">
-                    {/* Left: Smaller Fluted OFF/VOL Knob */}
-                    <div className="flex flex-col items-center justify-center">
-                      <RotaryKnob
-                        size="sm"
-                        value={engineSnap.powered ? volume : 0}
-                        onChange={handleVolumeChange}
-                        ariaLabel="Громкость и включение OFF/VOL"
-                        displayText={engineSnap.powered ? `${Math.round(volume * 100)}%` : 'OFF'}
-                      />
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full transition-colors shrink-0"
-                          style={{
-                            backgroundColor: engineSnap.powered ? sguSpec.accentColor : '#4b5563',
-                            boxShadow: engineSnap.powered ? `0 0 8px ${sguSpec.accentColor}` : 'none',
-                          }}
-                          aria-hidden="true"
-                        />
-                        <span
-                          className="text-[11px] sm:text-xs font-extrabold tracking-wide"
-                          style={{ color: sguSpec.accentColor }}
-                        >
-                          OFF/VOL
-                        </span>
-                      </div>
-                      <span className="mono-nums text-[11px] font-bold text-white/80 mt-0.5">
-                        {engineSnap.powered ? `${Math.round(volume * 100)}%` : 'ВЫКЛ'}
-                      </span>
-                    </div>
+                <div className="flex flex-col items-center justify-center min-w-0 px-1">
+                  <RegionFlags compact />
+                  <a
+                    href={SITE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mono-nums text-[10.5px] sm:text-xs font-extrabold leading-tight tracking-tight hover:underline no-underline truncate max-w-full mt-1"
+                    style={{ color: sguSpec.accentColor }}
+                  >
+                    {SITE_URL}
+                  </a>
+                </div>
 
-                    {/* Right: Circular Selector Dial with 6 Radial Buttons & Glowing Dots */}
-                    <div className="relative w-full max-w-[244px] h-[156px] mx-auto">
-                      {/* Circular Track Ring & 6 Radial Indicator Dots */}
-                      <svg
-                        viewBox="0 0 238 156"
-                        className="pointer-events-none absolute inset-0 w-full h-full"
-                        aria-hidden="true"
-                      >
-                        <path
-                          d="M 86.2 121.0 A 40 40 0 1 1 151.8 121.0"
-                          fill="none"
-                          stroke="rgba(255,255,255,0.18)"
-                          strokeWidth="1.5"
-                          strokeDasharray="3 3"
-                        />
-                        {sguSpec.modes.map((item, idx) => {
-                          const rad = ((ARC_ANGLES[idx] - 90) * Math.PI) / 180;
-                          const dx = 119 + 40 * Math.cos(rad);
-                          const dy = 98 + 40 * Math.sin(rad);
-                          const active = engineSnap.powered && engineSnap.mode === item.mode;
-                          return (
-                            <circle
-                              key={item.mode}
-                              cx={dx}
-                              cy={dy}
-                              r={active ? 4.4 : 3}
-                              fill={active ? '#ffffff' : sguSpec.accentColor}
-                              opacity={active ? 1 : 0.65}
-                            />
-                          );
-                        })}
-                      </svg>
+                <span
+                  className="text-xl sm:text-2xl font-extrabold italic tracking-wide shrink-0"
+                  style={{ color: sguSpec.accentColor }}
+                >
+                  {sguSpec.modelCode}
+                </span>
+              </div>
 
-                      {/* Centered Circular Selector Knob */}
-                      <div className="absolute left-1/2 top-[98px] -translate-x-1/2 -translate-y-1/2 z-[2]">
-                        <RotaryKnob
-                          size="lg"
-                          value={knobModeValue}
-                          steps={knobOrder.length - 1}
-                          onTapStep={() => {
-                            const nextIdx = (Math.max(0, knobModeIndex) + 1) % knobOrder.length;
-                            handleSelectMode(knobOrder[nextIdx]);
-                          }}
-                          onChange={handleModeKnobChange}
-                          ariaLabel="Круговой переключатель режимов СГУ"
-                          displayText={MODE_LABELS[engineSnap.mode]}
-                        />
-                      </div>
+              {/* Dual Rotary Knobs Row: Volume & Mode */}
+              <div className="grid grid-cols-2 gap-3 items-center py-0.5">
+                <div className="flex flex-col items-center">
+                  <span className="text-[11px] font-extrabold tracking-widest text-[var(--dim)] mb-1">
+                    ГРОМКОСТЬ
+                  </span>
+                  <RotaryKnob
+                    size="sm"
+                    value={engineSnap.powered ? volume : 0}
+                    onChange={handleVolumeChange}
+                    ariaLabel="Громкость и включение"
+                    displayText={engineSnap.powered ? `${Math.round(volume * 100)}%` : 'OFF'}
+                  />
+                  <span
+                    className="mono-nums text-xs font-extrabold mt-1"
+                    style={{ color: engineSnap.powered ? sguSpec.accentColor : 'var(--dim)' }}
+                  >
+                    {engineSnap.powered ? `${Math.round(volume * 100)}%` : 'ВЫКЛ'}
+                  </span>
+                </div>
 
-                      {/* 6 Crisp Tactile Mode Keys Arranged Circularly Around the Knob */}
-                      {sguSpec.modes.map((item, idx) => {
-                        const active = engineSnap.powered && engineSnap.mode === item.mode;
-                        const posStyles: React.CSSProperties[] = [
-                          { right: 'calc(50% + 41px)', top: '115px' }, // 0: STANDBY (-125°)
-                          { right: 'calc(50% + 45px)', top: '72px' },  // 1: HILO (-75°)
-                          { right: '52%', top: '14px' },               // 2: YELP (-25°)
-                          { left: '52%', top: '14px' },                // 3: WAIL (+25°)
-                          { left: 'calc(50% + 45px)', top: '72px' },   // 4: PA (+75°)
-                          { left: 'calc(50% + 41px)', top: '115px' },  // 5: RADIO (+125°)
-                        ];
-                        return (
-                          <button
-                            key={item.mode}
-                            type="button"
-                            onClick={() => handleSelectMode(item.mode)}
-                            aria-pressed={active}
-                            style={posStyles[idx]}
-                            className={`arc-mode-btn z-[3] ${active ? 'active' : ''}`}
-                          >
-                            {item.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* MIDDLE STRIP: [PREMIER/HAZARD] · Flags + Bigger Anti-Theft Link · [7007] */}
-                  <div className="flex items-center justify-between gap-2 py-2 border-y border-white/15">
-                    <div className="hazard-badge shrink-0">
-                      <span
-                        className="text-[8.5px] font-extrabold tracking-[0.18em]"
-                        style={{ color: sguSpec.accentColor }}
-                      >
-                        {sguSpec.brandTop}
-                      </span>
-                      <span
-                        className="text-xs font-extrabold tracking-[0.12em]"
-                        style={{ color: sguSpec.accentColor }}
-                      >
-                        {sguSpec.brandBottom}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-col items-center justify-center min-w-0 px-1">
-                      <RegionFlags compact />
-                      <a
-                        href={SITE_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mono-nums text-[10.5px] sm:text-xs font-extrabold leading-tight tracking-tight hover:underline no-underline truncate max-w-full mt-1"
-                        style={{ color: sguSpec.accentColor }}
-                      >
-                        {SITE_URL}
-                      </a>
-                    </div>
-
-                    <span
-                      className="text-xl sm:text-2xl font-extrabold italic tracking-wide shrink-0"
-                      style={{ color: sguSpec.accentColor }}
-                    >
-                      {sguSpec.modelCode}
-                    </span>
-                  </div>
-
-                  {/* BOTTOM SECTION: Left RJ45 Mic Port (PTT) + Right Stepped Yellow Box with White MAN & HORN Keys */}
-                  <div className="grid grid-cols-[34%_66%] gap-2 items-end pt-2">
-                    {/* Left: Recessed RJ45 Mic Port -> Tap/Hold for PTT */}
-                    <div className="flex flex-col items-center justify-end">
-                      <button
-                        type="button"
-                        onPointerDown={(e) => void onPttDown(e)}
-                        onPointerUp={onPttUp}
-                        onPointerCancel={onPttUp}
-                        onLostPointerCapture={onPttUp}
-                        aria-label={`${sguSpec.pttLabel}: удерживайте для громкой связи`}
-                        aria-pressed={pttPressed}
-                        className={`mic-socket no-select ${pttPressed ? 'pressed' : ''}`}
-                      >
-                        <div className="mic-socket-pins" aria-hidden="true">
-                          <span /><span /><span /><span /><span /><span />
-                        </div>
-                        <span
-                          className={`text-[10px] font-extrabold tracking-wider ${
-                            pttPressed ? 'text-rose-400' : 'text-white/80'
-                          }`}
-                        >
-                          {sguSpec.pttLabel} · МИКР
-                        </span>
-                      </button>
-                    </div>
-
-                    {/* Right: Signature Stepped Outline + Two Chunky White Silicone Keys */}
-                    <div
-                      className="rounded-md p-1.5 pt-1"
-                      style={{ border: `2px solid ${sguSpec.accentColor}` }}
-                    >
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="flex flex-col items-center">
-                          <span
-                            className="text-xs sm:text-[13px] font-extrabold tracking-wider mb-1"
-                            style={{ color: sguSpec.accentColor }}
-                          >
-                            {sguSpec.manLabel}
-                          </span>
-                          <button
-                            type="button"
-                            onPointerDown={onManDown}
-                            onPointerUp={onManUp}
-                            onPointerCancel={onManUp}
-                            onLostPointerCapture={onManUp}
-                            aria-label={`${sguSpec.manLabel}: ручная сирена / смена`}
-                            aria-pressed={manIsLit}
-                            className={`hw-white-key no-select ${manIsLit ? 'man-lit' : ''} ${
-                              manPressed ? 'pressed' : ''
-                            }`}
-                          >
-                            <span className="text-[11px] font-extrabold tracking-wider opacity-75">
-                              {sguSpec.manLabel}
-                            </span>
-                          </button>
-                        </div>
-
-                        <div className="flex flex-col items-center">
-                          <span
-                            className="text-xs sm:text-[13px] font-extrabold tracking-wider mb-1"
-                            style={{ color: sguSpec.accentColor }}
-                          >
-                            {sguSpec.hornLabel}
-                          </span>
-                          <button
-                            type="button"
-                            onPointerDown={onHornDown}
-                            onPointerUp={onHornUp}
-                            onPointerCancel={onHornUp}
-                            onLostPointerCapture={onHornUp}
-                            aria-label={`${sguSpec.hornLabel}: воздушный сигнал`}
-                            aria-pressed={hornIsLit}
-                            className={`hw-white-key no-select ${hornIsLit ? 'horn-lit' : ''} ${
-                              hornPressed ? 'pressed' : ''
-                            }`}
-                          >
-                            <span className="text-[11px] font-extrabold tracking-wider opacity-75">
-                              {sguSpec.hornLabel}
-                            </span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-[11px] font-extrabold tracking-widest text-[var(--dim)] mb-1">
+                    РЕЖИМ
+                  </span>
+                  <RotaryKnob
+                    size="lg"
+                    value={knobModeValue}
+                    steps={knobOrder.length - 1}
+                    onTapStep={() => {
+                      const nextIdx = (Math.max(0, knobModeIndex) + 1) % knobOrder.length;
+                      handleSelectMode(knobOrder[nextIdx]);
+                    }}
+                    onChange={handleModeKnobChange}
+                    ariaLabel="Переключатель режимов СГУ"
+                    displayText={MODE_LABELS[engineSnap.mode]}
+                  />
+                  <span
+                    className="text-xs font-extrabold tracking-wider mt-1"
+                    style={{ color: sguSpec.accentColor }}
+                  >
+                    {sguSpec.modes.find((m) => m.mode === engineSnap.mode)?.label || MODE_LABELS[engineSnap.mode]}
+                  </span>
                 </div>
               </div>
+
+              {/* Spacious 3x2 Mode Selector Grid */}
+              <div className="grid grid-cols-3 gap-2">
+                {gridModes.map((item) => {
+                  const active = engineSnap.powered && engineSnap.mode === item.mode;
+                  return (
+                    <button
+                      key={item.mode}
+                      type="button"
+                      onClick={() => handleSelectMode(item.mode)}
+                      aria-pressed={active}
+                      className={`siren-btn min-h-[46px] px-2 py-2 text-xs sm:text-[13px] font-extrabold tracking-wide whitespace-nowrap truncate ${
+                        active ? 'active' : ''
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Primary Action Keys: MAN & HORN */}
+              <div className="grid grid-cols-2 gap-2.5 pt-0.5">
+                <button
+                  type="button"
+                  onPointerDown={onManDown}
+                  onPointerUp={onManUp}
+                  onPointerCancel={onManUp}
+                  onLostPointerCapture={onManUp}
+                  aria-label={`${sguSpec.manLabel}: ручная сирена / смена`}
+                  aria-pressed={manIsLit}
+                  className={`console-key no-select ${manIsLit ? 'man-lit' : ''} ${
+                    manPressed ? 'pressed' : ''
+                  }`}
+                >
+                  <span
+                    className="text-base sm:text-lg font-extrabold tracking-wider"
+                    style={{ color: manIsLit ? undefined : sguSpec.accentColor }}
+                  >
+                    {sguSpec.manLabel}
+                  </span>
+                  <span className="text-[11px] font-semibold text-white/70">
+                    Удержание / смена
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onPointerDown={onHornDown}
+                  onPointerUp={onHornUp}
+                  onPointerCancel={onHornUp}
+                  onLostPointerCapture={onHornUp}
+                  aria-label={`${sguSpec.hornLabel}: воздушный сигнал`}
+                  aria-pressed={hornIsLit}
+                  className={`console-key no-select ${hornIsLit ? 'horn-lit' : ''} ${
+                    hornPressed ? 'pressed' : ''
+                  }`}
+                >
+                  <span
+                    className="text-base sm:text-lg font-extrabold tracking-wider"
+                    style={{ color: hornIsLit ? undefined : '#fb7185' }}
+                  >
+                    {sguSpec.hornLabel}
+                  </span>
+                  <span className="text-[11px] font-semibold text-white/70">
+                    Держи для сигнала
+                  </span>
+                </button>
+              </div>
+
+              {/* Full-Width PTT Hold-to-Talk Bar */}
+              <button
+                type="button"
+                onPointerDown={(e) => void onPttDown(e)}
+                onPointerUp={onPttUp}
+                onPointerCancel={onPttUp}
+                onLostPointerCapture={onPttUp}
+                aria-label={`${sguSpec.pttLabel}: удерживайте для громкой связи`}
+                aria-pressed={pttPressed}
+                className={`siren-btn w-full min-h-[46px] px-3.5 py-2 flex items-center justify-between gap-3 no-select ${
+                  pttPressed ? 'horn-active pressed' : ''
+                }`}
+              >
+                <span className="flex items-center gap-2.5 min-w-0">
+                  <Mic className={`w-4 h-4 shrink-0 ${pttPressed ? 'text-white' : 'text-[var(--acc)]'}`} aria-hidden="true" />
+                  <span className="text-xs sm:text-[13px] font-extrabold tracking-wide text-left truncate">
+                    {sguSpec.pttLabel} · Удерживай, чтобы говорить
+                  </span>
+                </span>
+                <span
+                  className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                    pttPressed ? 'bg-rose-400 shadow-[0_0_8px_#fb7185]' : 'bg-white/25'
+                  }`}
+                  aria-hidden="true"
+                />
+              </button>
             </div>
 
             {micStatusMsg && (
               <p className="mt-1.5 text-xs text-amber-300 font-semibold px-1">{micStatusMsg}</p>
             )}
 
-            {/* Uniform Balanced 3x2 Grid: 5 Officer Megaphone Phrases + СТОП ВСЁ */}
+            {/* Full-Width Emergency Cutoff Button Positioned Directly Between SGU Unit & DPS Voice Card */}
+            <button
+              type="button"
+              onClick={handleStopAll}
+              className="siren-btn stop-switch w-full mt-2.5 min-h-[46px] px-4 py-2.5 text-xs sm:text-sm font-extrabold tracking-widest flex items-center justify-center gap-2"
+            >
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-400 shadow-[0_0_8px_#fb7185]" aria-hidden="true" />
+              <span>СТОП ВСЁ</span>
+            </button>
+
+            {/* Clean 3x2 Grid of All 6 Officer Megaphone Phrases */}
             <div className="panel-surface mt-2.5 p-3 space-y-2">
               <div className="flex items-center justify-between px-0.5">
                 <span className="text-xs font-extrabold tracking-wide text-[var(--acc)] flex items-center gap-1.5">
@@ -1072,13 +1086,6 @@ export default function App() {
                     </button>
                   );
                 })}
-                <button
-                  type="button"
-                  onClick={handleStopAll}
-                  className="siren-btn stop-switch min-h-[44px] px-2.5 py-2 text-xs sm:text-[13px] font-extrabold tracking-wider"
-                >
-                  СТОП ВСЁ
-                </button>
               </div>
             </div>
           </section>
@@ -1098,7 +1105,7 @@ export default function App() {
                 {!proUnlocked && (
                   <button
                     type="button"
-                    onClick={() => setLockModalOpen(true)}
+                    onClick={() => openLockModalFor('СГУ')}
                     className="text-xs font-bold text-[var(--acc)] flex items-center gap-1 cursor-pointer"
                   >
                     <Lock className="w-3.5 h-3.5" aria-hidden="true" />
@@ -1112,11 +1119,11 @@ export default function App() {
                   <div className="hidden lg:flex absolute inset-0 z-10 rounded-[inherit] bg-black/65 items-center justify-center p-4 text-center">
                     <button
                       type="button"
-                      onClick={() => setLockModalOpen(true)}
+                      onClick={() => openLockModalFor('СГУ')}
                       className="siren-btn active px-5 py-3 text-sm flex items-center gap-2"
                     >
                       <Lock className="w-4 h-4" aria-hidden="true" />
-                      <span>Разблокировать СГУ, Свет и FX</span>
+                      <span>Как открыть СГУ, Свет и FX</span>
                     </button>
                   </div>
                 )}
@@ -1184,11 +1191,11 @@ export default function App() {
                   <div className="hidden lg:flex absolute inset-0 z-10 rounded-[inherit] bg-black/65 items-center justify-center p-4">
                     <button
                       type="button"
-                      onClick={() => setLockModalOpen(true)}
+                      onClick={() => openLockModalFor('Свет')}
                       className="siren-btn active px-5 py-3 text-sm flex items-center gap-2"
                     >
                       <Lock className="w-4 h-4" aria-hidden="true" />
-                      <span>Требуется код доступа</span>
+                      <span>Как открыть раздел «Свет»</span>
                     </button>
                   </div>
                 )}
@@ -1248,26 +1255,71 @@ export default function App() {
                   <div className="hidden lg:flex absolute inset-0 z-10 rounded-[inherit] bg-black/65 items-center justify-center p-4">
                     <button
                       type="button"
-                      onClick={() => setLockModalOpen(true)}
+                      onClick={() => openLockModalFor('FX')}
                       className="siren-btn active px-5 py-3 text-sm flex items-center gap-2"
                     >
                       <Lock className="w-4 h-4" aria-hidden="true" />
-                      <span>Требуется код доступа</span>
+                      <span>Как открыть раздел «FX»</span>
                     </button>
                   </div>
                 )}
 
                 <div>
+                  <div className="flex items-center justify-between text-xs mb-1.5">
+                    <span className="font-bold text-white">Усиление мощности (до МАКС)</span>
+                    <span className="mono-nums font-extrabold text-[var(--acc)]">
+                      {fxBoost >= 2.48 ? 'МАКС (250%)' : `${Math.round(fxBoost * 100)}%`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={100}
+                      max={250}
+                      step={5}
+                      value={Math.round(fxBoost * 100)}
+                      aria-label="Усиление громкости в FX до максимума"
+                      onChange={(e) => {
+                        const boost = Number(e.target.value) / 100;
+                        setFxBoost(boost);
+                        engineRef.current?.setFxBoost(boost);
+                      }}
+                      className="flex-1 accent-[var(--acc)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = fxBoost >= 2.48 ? 1.0 : 2.5;
+                        setFxBoost(next);
+                        engineRef.current?.setFxBoost(next);
+                        if (next >= 2.48) {
+                          setVolume(1.0);
+                          engineRef.current?.setVolume(1.0);
+                          setToneVal(8000);
+                          engineRef.current?.setTone(8000);
+                        }
+                        triggerHaptic(12);
+                      }}
+                      className={`siren-btn min-h-[34px] px-3 py-1 text-xs font-extrabold shrink-0 ${
+                        fxBoost >= 2.48 ? 'horn-active' : 'active'
+                      }`}
+                    >
+                      {fxBoost >= 2.48 ? '100%' : 'МАКС'}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
                   <div className="flex justify-between text-xs text-[var(--dim)] mb-1">
                     <span>Эхо (улица)</span>
                     <span className="mono-nums text-white font-bold">
-                      {Math.round((echoVal / 0.8) * 100)}%
+                      {Math.round(echoVal * 100)}%
                     </span>
                   </div>
                   <input
                     type="range"
                     min={0}
-                    max={80}
+                    max={100}
                     value={Math.round(echoVal * 100)}
                     aria-label="Эхо улица"
                     onChange={(e) => {
@@ -1283,13 +1335,13 @@ export default function App() {
                   <div className="flex justify-between text-xs text-[var(--dim)] mb-1">
                     <span>Туннель (объёмное эхо)</span>
                     <span className="mono-nums text-white font-bold">
-                      {Math.round((tunnelVal / 0.8) * 100)}%
+                      {Math.round(tunnelVal * 100)}%
                     </span>
                   </div>
                   <input
                     type="range"
                     min={0}
-                    max={80}
+                    max={100}
                     value={Math.round(tunnelVal * 100)}
                     aria-label="Туннель объёмное эхо"
                     onChange={(e) => {
@@ -1309,7 +1361,7 @@ export default function App() {
                   <input
                     type="range"
                     min={800}
-                    max={6000}
+                    max={8000}
                     step={50}
                     value={toneVal}
                     aria-label="Резкость звука"
@@ -1761,37 +1813,69 @@ export default function App() {
         </div>
       )}
 
-      {/* Pro Unlock Modal */}
+      {/* Pro Unlock Modal with Clear Step-by-Step Guide */}
       {lockModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-5 bg-black/75"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75"
           role="dialog"
           aria-modal="true"
           aria-labelledby="lock-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setLockModalOpen(false);
+          }}
         >
-          <div className="panel-surface w-full max-w-sm p-6 text-center">
-            <h2 id="lock-title" className="text-xl font-extrabold text-white mb-2">
-              Закрытый раздел
-            </h2>
-            <p className="text-sm text-white/80 mb-4 leading-relaxed">
-              Пригласи 3 человек по ссылке бота, скинь скриншот в Telegram{' '}
-              <strong className="text-white">@aitral</strong> и получи код.
-            </p>
+          <div className="panel-surface w-full max-w-sm max-h-[90dvh] overflow-y-auto p-5 text-left">
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div>
+                <h2 id="lock-title" className="text-lg font-extrabold text-white">
+                  {lockTargetSection ? `Как открыть раздел «${lockTargetSection}»` : 'Открыть доступ к СГУ, Свет и FX'}
+                </h2>
+                <p className="text-xs text-[var(--acc)] font-semibold mt-0.5">
+                  Открывает сразу: пульты ГРАЧ / ЭЛИНА / БАРС, мигалки и эффекты звука
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLockModalOpen(false)}
+                aria-label="Закрыть окно"
+                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/80 shrink-0 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-white/12 bg-black/35 p-3 space-y-2 text-xs text-white/85 leading-relaxed mb-3.5">
+              <p className="font-bold text-white">Что нужно сделать (4 простых шага):</p>
+              <ol className="list-decimal list-inside space-y-1.5">
+                <li>
+                  Нажми <strong className="text-white">«Скопировать ссылку»</strong> ниже и отправь её <strong className="text-white">3 друзьям</strong>.
+                </li>
+                <li>
+                  Друзья должны перейти по ссылке в бот <strong className="text-[#56bfff]">@AlpanVPNrobot</strong> и нажать <strong className="text-white">Start</strong>.
+                </li>
+                <li>
+                  Сделай скриншот и отправь его в Telegram <strong className="text-[#56bfff]">@aitral</strong> — он сразу выдаст тебе <strong className="text-white">4-значный код</strong>.
+                </li>
+                <li>
+                  Введи полученный код ниже и нажми <strong className="text-white">«Открыть доступ»</strong> — все закрытые вкладки откроются навсегда.
+                </li>
+              </ol>
+            </div>
 
             <button
               type="button"
               onClick={() => void handleCopyBotLink()}
-              className="siren-btn w-full py-3 px-4 text-sm flex items-center justify-center gap-2"
+              className="siren-btn w-full py-2.5 px-4 text-xs sm:text-sm flex items-center justify-center gap-2"
             >
               {copiedLink ? (
                 <>
                   <Check className="w-4 h-4 text-[var(--ok)]" aria-hidden="true" />
-                  <span>Ссылка скопирована</span>
+                  <span>Ссылка скопирована! Отправь 3 друзьям</span>
                 </>
               ) : (
                 <>
                   <Copy className="w-4 h-4" aria-hidden="true" />
-                  <span>Скопировать ссылку для друзей</span>
+                  <span>1. Скопировать ссылку для друзей</span>
                 </>
               )}
             </button>
@@ -1800,12 +1884,12 @@ export default function App() {
               href={SUPPORT_TG_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="siren-btn block w-full mt-2.5 py-3 px-4 text-sm leading-6 no-underline"
+              className="siren-btn flex items-center justify-center w-full mt-2 py-2.5 px-4 text-xs sm:text-sm no-underline"
             >
-              Написать @aitral
+              2. Отправить скрин в Telegram @aitral
             </a>
 
-            <form onSubmit={(e) => void handleUnlockSubmit(e)} className="mt-3.5">
+            <form onSubmit={(e) => void handleUnlockSubmit(e)} className="mt-3">
               <input
                 type="text"
                 inputMode="numeric"
@@ -1816,35 +1900,35 @@ export default function App() {
                   setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 4));
                   if (codeError) setCodeError('');
                 }}
-                placeholder="4-значный код"
+                placeholder="Введи 4-значный код"
                 aria-label="Введите 4-значный код доступа"
                 autoComplete="off"
-                className="mono-nums w-full py-3.5 px-4 rounded-xl border border-white/25 bg-black/45 text-white text-center text-lg tracking-[0.35em] outline-none focus:border-[var(--acc)]"
+                className="mono-nums w-full py-3 px-4 rounded-xl border border-white/25 bg-black/45 text-white text-center text-base tracking-[0.28em] outline-none focus:border-[var(--acc)]"
               />
               {codeError && (
-                <p className="text-xs text-rose-400 font-semibold mt-2">{codeError}</p>
+                <p className="text-xs text-rose-400 font-semibold mt-2 text-center">{codeError}</p>
               )}
               <button
                 type="submit"
-                className="w-full mt-3 py-3.5 rounded-xl font-bold text-white bg-gradient-to-b from-[#4d8dff] to-[#2467e8] border border-white/30 cursor-pointer"
+                className="w-full mt-2.5 py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-b from-[#4d8dff] to-[#2467e8] border border-white/30 cursor-pointer"
               >
-                Открыть
+                Открыть доступ
               </button>
             </form>
 
             <button
               type="button"
               onClick={() => setLockModalOpen(false)}
-              className="mt-2 py-2 w-full text-xs text-[var(--dim)] hover:text-white cursor-pointer"
+              className="mt-2 py-1.5 w-full text-xs text-[var(--dim)] hover:text-white cursor-pointer"
             >
-              Закрыть
+              Вернуться в пульт
             </button>
-            <BrandWatermark compact className="mt-2.5 pt-2.5 border-t border-white/10" />
+            <BrandWatermark compact className="mt-2 pt-2 border-t border-white/10" />
           </div>
         </div>
       )}
 
-      {/* Microphone Audio Session Warning Modal */}
+      {/* Microphone Audio Session Warning Modal (for PTT mic talkover) */}
       {micWarningOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-5 bg-black/75"
@@ -1856,7 +1940,7 @@ export default function App() {
             <div className="flex items-start justify-between gap-3 mb-2">
               <h2 id="mic-warn-title" className="text-base font-extrabold text-white flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-[var(--acc)] shrink-0" aria-hidden="true" />
-                <span>Запрос микрофона (PA / PTT)</span>
+                <span>Микрофон для громкой связи (PTT)</span>
               </h2>
               <button
                 type="button"
@@ -1868,7 +1952,7 @@ export default function App() {
               </button>
             </div>
             <p className="text-xs text-white/80 leading-relaxed mb-3.5">
-              Микрофон может остановить музыку в других приложениях. Все остальные режимы сирены работают поверх музыки без микрофона.
+              Включение микрофона для кнопки PTT может приостановить фоновую музыку в других приложениях. Режимы сирены и фразы ДПС работают поверх музыки.
             </p>
             <div className="space-y-2">
               <button
@@ -1876,20 +1960,15 @@ export default function App() {
                 onClick={() => {
                   setMicConfirmed(true);
                   setMicWarningOpen(false);
-                  if (micPendingAction === 'pa') {
-                    void activatePA();
-                  }
-                  setMicPendingAction(null);
                 }}
                 className="siren-btn active w-full py-2.5 text-xs"
               >
-                Включить микрофон
+                Разрешить и удерживать PTT
               </button>
               <button
                 type="button"
                 onClick={() => {
                   setMicWarningOpen(false);
-                  setMicPendingAction(null);
                 }}
                 className="w-full py-2 text-xs text-[var(--dim)] hover:text-white"
               >

@@ -18,10 +18,10 @@
   };
 
   const SGU_HORN = {
-    hazard: { lo: 580, hi: 1620, rate: 54.4, rise: 0.3, useRec: true },
-    grach:  { lo: 340, hi: 920,  rate: 38.5, rise: 0.42, useRec: false },
-    elina:  { lo: 490, hi: 1380, rate: 62.0, rise: 0.28, useRec: false },
-    bars:   { lo: 290, hi: 760,  rate: 28.0, rise: 0.45, useRec: false },
+    hazard: { pitch: 1.0,  useRec: true },
+    grach:  { pitch: 0.78, useRec: true },
+    elina:  { pitch: 1.08, useRec: true },
+    bars:   { pitch: 0.68, useRec: true },
   };
   const MAN = { start: 410, max: 1480, rise: 4800, tau: 0.78, cut: 290, spin: 1430, burst: 1000 };
 
@@ -43,26 +43,6 @@
   };
 
   const LOOPS = ['wail', 'yelp', 'phaser'];
-  // Brassy SGU compression-horn harmonic spectrum
-  const TIMBRE = [1.0, 0.16, 0.34, 0.09, 0.19, 0.05, 0.11, 0.03];
-  const TBL = 2048;
-
-  function table(h) {
-    const t = new Float32Array(TBL + 1);
-    let peak = 0;
-    for (let i = 0; i < TBL; i++) {
-      const x = (i / TBL) * Math.PI * 2;
-      let v = 0;
-      for (let k = 0; k < h.length; k++) if (h[k]) v += h[k] * Math.sin(x * (k + 1));
-      t[i] = v;
-      peak = Math.max(peak, Math.abs(v));
-    }
-    for (let i = 0; i < TBL; i++) t[i] /= peak || 1;
-    t[TBL] = t[0];
-    return t;
-  }
-
-  const OUT_SYN = 0.9;
   function read(pcm, pos) {
     const i = pos | 0;
     const fr = pos - i;
@@ -77,9 +57,6 @@
       this.sr = sr;
       this.s = { power: false, tone: 0, man: 'off', manHeld: false, horn: false, mute: false };
       this.sgu = 'hazard';
-      this.source = 'rec';
-      this.tbl = table(TIMBRE);
-      this.hornTbl = table([1.0, 0.18, 0.36, 0.12, 0.22, 0.08]);
       this.rec = {};
 
       this.ph = 0; this.f = 0; this.tf = 0; this.f1 = 0; this.dir = 1;
@@ -106,7 +83,7 @@
 
     get useRec() {
       const r = this.rec;
-      return this.source === 'rec' && !!(r.wail && r.yelp && r.phaser && r.tone);
+      return !!(r.wail && r.yelp && r.phaser && r.tone);
     }
 
     message(m) {
@@ -117,8 +94,6 @@
         if (this.s.tone === 9 && prevTone !== 9) this.usaT = 0;
       } else if (m.type === 'sgu') {
         this.sgu = SGU_HORN[m.id] ? m.id : 'hazard';
-      } else if (m.type === 'source') {
-        this.source = m.id === 'synth' ? 'synth' : 'rec';
       } else if (m.type === 'sample') {
         this.rec[m.name] = {
           pcm: m.pcm,
@@ -272,10 +247,9 @@
       }
       this.fPrev = this.f;
 
-      const tbl = this.tbl, htbl = this.hornTbl, R = this.rec, V = this.v;
+      const R = this.rec, V = this.v;
       const tone = R.tone, toneV = V.tone, hornR = R.horn;
       const sh = SGU_HORN[this.sgu] || SGU_HORN.hazard;
-      const lnHorn = Math.log(sh.hi / sh.lo);
       let peak = 0;
 
       for (let i = 0; i < n; i++) {
@@ -334,43 +308,21 @@
           const tt = toneOn ? 1 : 0;
           if (toneV.g !== tt) toneV.g = tt > toneV.g ? Math.min(tt, toneV.g + this.kX) : Math.max(tt, toneV.g - this.kX);
           if (toneV.g > 0) {
-            const rawTone = read(tone.pcm, toneV.pos);
-            // Add subtle horn driver grit to pitched tone.wav so Russian SGU & HI-LO punch like real under-hood speakers
-            this.ph += this.f * dt;
-            this.ph -= Math.floor(this.ph);
-            const sx = this.ph * TBL, sj = sx | 0, sfr = sx - sj;
-            const hornHarm = tbl[sj] + (tbl[sj + 1] - tbl[sj]) * sfr;
-            const blended = rawTone * 0.72 + hornHarm * 0.28;
-            y += Math.tanh(blended * 1.28) * 0.88 * eq(toneV.g);
+            // Pure real recorded SGU tone sample for all systems (no synthesized waveform blend)
+            y += read(tone.pcm, toneV.pos) * eq(toneV.g);
             const step = this.f / (tone.hz || 904.4);
             toneV.pos += Number.isFinite(step) && step >= 0 ? step : 1;
             if (toneV.pos >= tone.pcm.length) toneV.pos %= tone.pcm.length;
           }
           y *= this.amp;
-        } else if (this.amp > 1e-5) {
-          this.ph += this.f * dt;
-          this.ph -= Math.floor(this.ph);
-          const x = this.ph * TBL, j = x | 0, fr = x - j;
-          const rawS = tbl[j] + (tbl[j + 1] - tbl[j]) * fr;
-          y = Math.tanh(rawS * 1.32) * 0.86 * this.amp * OUT_SYN;
         }
 
         this.hg += (hornT - this.hg) * (hornT > this.hg ? this.kHornOn : this.kHornOff);
-        if (this.hg > 1e-5) {
-          let h;
-          if (sh.useRec && rec && hornR) {
-            h = read(hornR.pcm, this.hornPos);
-            this.hornPos += 1;
-            if (this.hornPos >= hornR.pcm.length) this.hornPos = hornR.ls + (this.hornPos - hornR.pcm.length);
-          } else {
-            this.hph += sh.rate * dt;
-            if (this.hph >= 1) this.hph -= 1;
-            const u = this.hph < sh.rise ? this.hph / sh.rise : 1 - (this.hph - sh.rise) / (1 - sh.rise);
-            this.hc += sh.lo * Math.exp(u * lnHorn) * dt;
-            this.hc -= Math.floor(this.hc);
-            const x = this.hc * TBL, j = x | 0, fr = x - j;
-            const rawH = htbl[j] + (htbl[j + 1] - htbl[j]) * fr;
-            h = Math.tanh(rawH * 1.38) * 0.92 * OUT_SYN;
+        if (this.hg > 1e-5 && rec && hornR) {
+          const h = read(hornR.pcm, this.hornPos);
+          this.hornPos += sh.pitch || 1.0;
+          if (this.hornPos >= hornR.pcm.length) {
+            this.hornPos = hornR.ls + ((this.hornPos - hornR.pcm.length) % Math.max(1, hornR.pcm.length - hornR.ls));
           }
           y = y * (1 - this.hg) + h * this.hg;
         }

@@ -30,7 +30,7 @@ for (const name of wavNames) {
   wavBase64[name] = wavBuf.toString('base64');
 }
 
-const phraseIds = ['obochina', 'vpravo_stop', 'prizhatsa', 'strelyat', 'ostanavlivaemsya'];
+const phraseIds = ['obochina', 'vpravo_stop', 'prizhatsa', 'strelyat', 'ostanavlivaemsya', 'voditel_stop'];
 const phrasesBase64 = {};
 for (const id of phraseIds) {
   const mp3Buf = fs.readFileSync(path.join(soundsDir, 'phrases', `${id}.mp3`));

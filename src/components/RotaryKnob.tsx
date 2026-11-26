@@ -30,13 +30,13 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
   const angle = value * (maxArc * 2) - maxArc;
 
   const ticks = useMemo(() => {
-    const count = steps > 0 ? 0 : 13;
+    const count = steps > 0 ? steps + 1 : 13;
     return Array.from({ length: count }, (_, idx) => {
       const ratio = idx / (count - 1);
-      const deg = ratio * 270 - 135;
-      return { deg, lit: ratio <= value + 0.01 };
+      const deg = ratio * (maxArc * 2) - maxArc;
+      return { deg, lit: steps > 0 ? Math.abs(ratio - value) < 0.06 : ratio <= value + 0.01 };
     });
-  }, [steps, value]);
+  }, [steps, value, maxArc]);
 
   const updateCircular = (clientX: number, clientY: number) => {
     const el = dialRef.current;

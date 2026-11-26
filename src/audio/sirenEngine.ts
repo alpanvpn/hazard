@@ -45,7 +45,8 @@ export type PhraseId =
   | 'vpravo_stop'
   | 'prizhatsa'
   | 'strelyat'
-  | 'ostanavlivaemsya';
+  | 'ostanavlivaemsya'
+  | 'voditel_stop';
 
 export interface EngineSnapshot {
   powered: boolean;
@@ -115,9 +116,13 @@ export class SirenAudioEngine {
   private convolver: ConvolverNode | null = null;
   private tunnelWet: GainNode | null = null;
   private masterGain: GainNode | null = null;
+  private fxGainNode: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
   private analyser: AnalyserNode | null = null;
   private analyserBuf = new Float32Array(1024);
+  private clickBuffer: AudioBuffer | null = null;
+  private rawWavCache = new Map<string, ArrayBuffer>();
+  private metaCache: Record<string, MetaEntry> | null = null;
 
   private radioGate: GainNode | null = null;
   private radioBuffer: AudioBuffer | null = null;
@@ -147,9 +152,10 @@ export class SirenAudioEngine {
   private beepEnabled = true;
 
   private volume = 1.0;
+  private fxBoost = 1.0;
   private echoLevel = 0;
   private tunnelLevel = 0;
-  private toneFreq = 4800;
+  private toneFreq = 6000;
   private micDb = 18;
   private sessionType: 'ambient' | 'playback' = 'playback';
   private sguSystem: 'hazard' | 'grach' | 'elina' | 'bars' = 'hazard';
@@ -233,29 +239,39 @@ export class SirenAudioEngine {
     if (getInlineAssets()?.wavBase64) {
       return;
     }
-    const urls = [
-      'sounds/meta.json',
-      'sounds/wail.wav',
-      'sounds/yelp.wav',
-      'sounds/phaser.wav',
-      'sounds/horn.wav',
-      'sounds/tone.wav',
-      'sounds/wolf.wav',
+    const wavNames = ['wail', 'yelp', 'phaser', 'horn', 'tone', 'wolf'] as const;
+    const phraseUrls = [
       'sounds/phrases/obochina.mp3',
       'sounds/phrases/vpravo_stop.mp3',
       'sounds/phrases/prizhatsa.mp3',
       'sounds/phrases/strelyat.mp3',
       'sounds/phrases/ostanavlivaemsya.mp3',
+      'sounds/phrases/voditel_stop.mp3',
     ];
-    await Promise.all(
-      urls.map(async (u) => {
+    await Promise.all([
+      fetch('sounds/meta.json')
+        .then(async (r) => {
+          if (r.ok) this.metaCache = (await r.json()) as Record<string, MetaEntry>;
+        })
+        .catch(() => {}),
+      ...wavNames.map(async (name) => {
+        try {
+          const r = await fetch(`sounds/${name}.wav`);
+          if (r.ok) {
+            this.rawWavCache.set(name, await r.arrayBuffer());
+          }
+        } catch {
+          // Offline cache handles it
+        }
+      }),
+      ...phraseUrls.map(async (u) => {
         try {
           await fetch(u);
         } catch {
           // Offline cache handles it
         }
-      })
-    );
+      }),
+    ]);
   }
 
   private createImpulseResponse(ctx: AudioContext, duration = 1.15, decay = 2.8): AudioBuffer {
@@ -314,17 +330,11 @@ export class SirenAudioEngine {
     this.toneFilter.frequency.value = this.toneFreq;
     this.toneFilter.Q.value = 0.7;
 
-    // Realistic under-hood SGU horn projection EQ
+    // Gentle subsonic highpass preserves authentic low-mid body of Hazard 7007 recordings
     const hornHp = ctx.createBiquadFilter();
     hornHp.type = 'highpass';
-    hornHp.frequency.value = 220;
+    hornHp.frequency.value = 85;
     hornHp.Q.value = 0.7;
-
-    const hornPresence = ctx.createBiquadFilter();
-    hornPresence.type = 'peaking';
-    hornPresence.frequency.value = 1480;
-    hornPresence.Q.value = 0.85;
-    hornPresence.gain.value = 3.2;
 
     this.dryGain = ctx.createGain();
     this.dryGain.gain.value = 1;
@@ -344,34 +354,47 @@ export class SirenAudioEngine {
     this.masterGain = ctx.createGain();
     this.masterGain.gain.value = this.volCurve(this.volume);
 
+    // FX Boost / Maximizer stage allows pushing volume up to 250% MAX cleanly without clipping
+    this.fxGainNode = ctx.createGain();
+    this.fxGainNode.gain.value = this.fxBoost;
+
     this.limiter = ctx.createDynamicsCompressor();
-    this.limiter.threshold.value = -0.3;
-    this.limiter.knee.value = 0;
-    this.limiter.ratio.value = 20;
-    this.limiter.attack.value = 0.001;
-    this.limiter.release.value = 0.08;
+    this.limiter.threshold.value = -1.2;
+    this.limiter.knee.value = 3;
+    this.limiter.ratio.value = 16;
+    this.limiter.attack.value = 0.0015;
+    this.limiter.release.value = 0.06;
 
     this.analyser = ctx.createAnalyser();
     this.analyser.fftSize = 2048;
     this.analyser.smoothingTimeConstant = 0.3;
 
-    this.toneFilter.connect(hornHp);
-    hornHp.connect(hornPresence);
+    // Precompute tiny 4ms physical microswitch impulse click (zero oscillator synthesis)
+    const cLen = Math.max(32, Math.floor(ctx.sampleRate * 0.004));
+    const cBuf = ctx.createBuffer(1, cLen, ctx.sampleRate);
+    const cData = cBuf.getChannelData(0);
+    for (let i = 0; i < cLen; i++) {
+      cData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (cLen * 0.28)) * 0.45;
+    }
+    this.clickBuffer = cBuf;
 
-    hornPresence.connect(this.dryGain);
+    this.toneFilter.connect(hornHp);
+
+    hornHp.connect(this.dryGain);
     this.dryGain.connect(this.masterGain);
 
-    hornPresence.connect(this.delayNode);
+    hornHp.connect(this.delayNode);
     this.delayNode.connect(this.delayFeedback);
     this.delayFeedback.connect(this.delayNode);
     this.delayNode.connect(this.delayWet);
     this.delayWet.connect(this.masterGain);
 
-    hornPresence.connect(this.convolver);
+    hornHp.connect(this.convolver);
     this.convolver.connect(this.tunnelWet);
     this.tunnelWet.connect(this.masterGain);
 
-    this.masterGain.connect(this.limiter);
+    this.masterGain.connect(this.fxGainNode);
+    this.fxGainNode.connect(this.limiter);
     this.limiter.connect(this.analyser);
     this.analyser.connect(ctx.destination);
 
@@ -462,7 +485,6 @@ export class SirenAudioEngine {
       const wCopy = new Float32Array(this.wolfCache);
       this.sendFn({ type: 'wolfData', pcm: wCopy }, [wCopy.buffer]);
     }
-    this.sendFn({ type: 'source', id: this.recReady ? 'rec' : 'synth' });
     this.pushState();
   }
 
@@ -512,14 +534,13 @@ export class SirenAudioEngine {
 
     this.ready = true;
     this.sendFn?.({ type: 'sgu', id: this.sguSystem });
+    // Decode real recorded WAVs immediately before playing audio so zero synthetic tones emit
+    await this.loadHazardSamples();
     this.pushState();
     if (ctx.state !== 'running') {
       ctx.resume().catch(() => {});
     }
     this.emit();
-
-    // Stream WAV recordings in background so UI buttons respond immediately on first tap
-    void this.loadHazardSamples();
 
     // Safari WebKit safety watchdog: if AudioWorklet didn't emit a heartbeat within 500ms, switch to ScriptProcessor
     if (usingWorklet && typeof window !== 'undefined') {
@@ -548,7 +569,7 @@ export class SirenAudioEngine {
     try {
       const meta = inline?.meta
         ? inline.meta
-        : ((await (await fetch('sounds/meta.json')).json()) as Record<string, MetaEntry>);
+        : this.metaCache ?? ((await (await fetch('sounds/meta.json')).json()) as Record<string, MetaEntry>);
       const names = ['wail', 'yelp', 'phaser', 'horn', 'tone'] as const;
       let ok = 0;
 
@@ -558,6 +579,8 @@ export class SirenAudioEngine {
             let ab: ArrayBuffer;
             if (inline?.wavBase64?.[name]) {
               ab = base64ToArrayBuffer(inline.wavBase64[name]);
+            } else if (this.rawWavCache.has(name)) {
+              ab = this.rawWavCache.get(name)!;
             } else {
               const res = await fetch(`sounds/${name}.wav`);
               if (!res.ok) return;
@@ -592,18 +615,27 @@ export class SirenAudioEngine {
             this.loadedCount++;
             this.emit();
           } catch {
-            // Individual sample fallback handled cleanly by DSP
+            // Individual sample fallback
           }
         })
       );
 
       this.recReady = ok === names.length;
-      this.sendFn({ type: 'source', id: this.recReady ? 'rec' : 'synth' });
 
-      // Load wolf.wav in background
-      if (inline?.wavBase64?.wolf) {
+      // Load wolf.wav in background (using pre-cached buffer if available)
+      const loadWolf = async () => {
         try {
-          const decoded = await this.ctx.decodeAudioData(base64ToArrayBuffer(inline.wavBase64.wolf));
+          let ab: ArrayBuffer | null = null;
+          if (inline?.wavBase64?.wolf) {
+            ab = base64ToArrayBuffer(inline.wavBase64.wolf);
+          } else if (this.rawWavCache.has('wolf')) {
+            ab = this.rawWavCache.get('wolf')!;
+          } else {
+            const r = await fetch('sounds/wolf.wav');
+            if (r.ok) ab = await r.arrayBuffer();
+          }
+          if (!ab || !this.ctx) return;
+          const decoded = await this.ctx.decodeAudioData(ab.slice(0));
           const raw = decoded.getChannelData(0);
           this.wolfCache = new Float32Array(raw);
           const pcm = new Float32Array(raw);
@@ -613,23 +645,10 @@ export class SirenAudioEngine {
         } catch {
           // Ignore
         }
-      } else {
-        fetch('sounds/wolf.wav')
-          .then((r) => (r.ok ? r.arrayBuffer() : null))
-          .then((ab) => (ab && this.ctx ? this.ctx.decodeAudioData(ab.slice(0)) : null))
-          .then((decoded) => {
-            if (!decoded) return;
-            const raw = decoded.getChannelData(0);
-            this.wolfCache = new Float32Array(raw);
-            const pcm = new Float32Array(raw);
-            this.sendFn?.({ type: 'wolfData', pcm }, [pcm.buffer]);
-            this.loadedCount++;
-            this.emit();
-          })
-          .catch(() => {});
-      }
+      };
+      void loadWolf();
     } catch {
-      this.sendFn({ type: 'source', id: 'synth' });
+      // Ignore load errors
     }
   }
 
@@ -729,19 +748,14 @@ export class SirenAudioEngine {
   }
 
   public playClick(strong = false): void {
-    if (!this.beepEnabled || !this.ctx || !this.masterGain) return;
-    const t = this.ctx.currentTime;
-    const o = this.ctx.createOscillator();
+    if (!this.beepEnabled || !this.ctx || !this.masterGain || !this.clickBuffer) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.clickBuffer;
     const g = this.ctx.createGain();
-    o.type = 'triangle';
-    o.frequency.setValueAtTime(strong ? 1600 : 1200, t);
-    o.frequency.exponentialRampToValueAtTime(340, t + 0.016);
-    g.gain.setValueAtTime(strong ? 0.16 : 0.08, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.018);
-    o.connect(g);
+    g.gain.value = strong ? 0.35 : 0.2;
+    src.connect(g);
     g.connect(this.masterGain);
-    o.start(t);
-    o.stop(t + 0.022);
+    src.start(0);
   }
 
   public async setPower(on: boolean): Promise<void> {
@@ -1095,22 +1109,29 @@ export class SirenAudioEngine {
     }
   }
 
+  public setFxBoost(v: number) {
+    this.fxBoost = Math.max(1.0, Math.min(2.5, v));
+    if (this.ctx && this.fxGainNode) {
+      this.ramp(this.fxGainNode.gain, this.fxBoost, 0.04);
+    }
+  }
+
   public setEcho(v: number) {
-    this.echoLevel = Math.max(0, Math.min(0.8, v));
+    this.echoLevel = Math.max(0, Math.min(1.0, v));
     if (this.ctx && this.delayWet) {
       this.ramp(this.delayWet.gain, this.echoLevel, 0.03);
     }
   }
 
   public setTunnel(v: number) {
-    this.tunnelLevel = Math.max(0, Math.min(0.8, v));
+    this.tunnelLevel = Math.max(0, Math.min(1.0, v));
     if (this.ctx && this.tunnelWet) {
       this.ramp(this.tunnelWet.gain, this.tunnelLevel, 0.03);
     }
   }
 
   public setTone(freq: number) {
-    this.toneFreq = Math.max(800, Math.min(6000, freq));
+    this.toneFreq = Math.max(800, Math.min(8000, freq));
     if (this.ctx && this.toneFilter) {
       this.ramp(this.toneFilter.frequency, this.toneFreq, 0.03);
     }
