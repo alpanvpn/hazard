@@ -43,6 +43,7 @@ export interface EngineSnapshot {
 
 interface MetaEntry {
   loopStart?: number;
+  loopEnd?: number;
   track?: number[];
   trackStep?: number;
   hz?: number;
@@ -151,6 +152,7 @@ export class SirenAudioEngine {
     name: string;
     pcm: Float32Array;
     loopStart: number;
+    loopEnd?: number;
     track?: number[];
     step?: number;
     hz?: number;
@@ -472,6 +474,7 @@ export class SirenAudioEngine {
           name: item.name,
           pcm: copy,
           loopStart: item.loopStart,
+          loopEnd: item.loopEnd,
           track: item.track,
           step: item.step,
           hz: item.hz,
@@ -605,6 +608,7 @@ export class SirenAudioEngine {
               name,
               pcm: pcmCache,
               loopStart: m.loopStart || 0,
+              loopEnd: m.loopEnd,
               track: m.track,
               step: m.trackStep,
               hz: m.hz,
@@ -615,6 +619,7 @@ export class SirenAudioEngine {
                 name,
                 pcm: pcmTransfer,
                 loopStart: m.loopStart || 0,
+                loopEnd: m.loopEnd,
                 track: m.track,
                 step: m.trackStep,
                 hz: m.hz,
@@ -785,6 +790,9 @@ export class SirenAudioEngine {
     if (this.pulsarHeld) {
       return TONE_CODE.phaser;
     }
+    if (this.sguSystem === 'k13' && this.manHeld && this.isPrimarySirenMode(this.mode)) {
+      return 0;
+    }
     if (this.altActive) {
       if (this.mode === 'hilo') return TONE_CODE.wail;
       if (this.mode === 'yelp') return TONE_CODE.phaser;
@@ -798,9 +806,12 @@ export class SirenAudioEngine {
     return m !== 'standby' && m !== 'pa' && m !== 'radio';
   }
 
-  private getManRole(): 'off' | 'manual' | 'pa' | 'wolf' | 'pulsar' {
+  private getManRole(): 'off' | 'manual' | 'manualOverride' | 'pa' | 'wolf' | 'pulsar' {
     if (!this.powered) return 'off';
     if (this.pulsarHeld) return 'pulsar';
+    if (this.sguSystem === 'k13' && this.manHeld && this.isPrimarySirenMode(this.mode)) {
+      return 'manualOverride';
+    }
     if (this.mode === 'pa') return 'pa';
     if (this.mode === 'standby' || this.mode === 'radio') {
       return this.manStyle === 'wolf' ? 'wolf' : 'manual';
@@ -896,13 +907,22 @@ export class SirenAudioEngine {
     this.emit();
   }
 
+  public async wakeAndClick(strong = false): Promise<void> {
+    if (!this.powered) this.powered = true;
+    this.emit();
+    await this.ensureStarted();
+    this.playClick(strong);
+    this.pushState();
+    this.emit();
+  }
+
   public async pressMan(): Promise<void> {
     if (!this.powered) this.powered = true;
 
     const wasHeld = this.manHeld;
     this.manHeld = true;
 
-    if (this.isPrimarySirenMode(this.mode)) {
+    if (this.sguSystem !== 'k13' && this.isPrimarySirenMode(this.mode)) {
       if (this.manSiren === 'toggle') {
         this.altActive = !this.altActive;
       } else {
@@ -930,7 +950,7 @@ export class SirenAudioEngine {
   public releaseMan(): void {
     if (!this.manHeld) return;
     this.manHeld = false;
-    if (this.isPrimarySirenMode(this.mode) && this.manSiren === 'hold') {
+    if (this.sguSystem !== 'k13' && this.isPrimarySirenMode(this.mode) && this.manSiren === 'hold') {
       this.altActive = false;
     }
     this.pushState();

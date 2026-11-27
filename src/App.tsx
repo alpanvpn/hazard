@@ -663,11 +663,12 @@ export default function App() {
     }
   };
 
-  const handleK13Short = () => {
+  const handleK13Short = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
     triggerHaptic(12);
     setK13ShortLit(true);
     if (k13ShortTimerRef.current !== null) window.clearTimeout(k13ShortTimerRef.current);
-    k13ShortTimerRef.current = window.setTimeout(() => setK13ShortLit(false), 260);
+    k13ShortTimerRef.current = window.setTimeout(() => setK13ShortLit(false), 240);
     void engineRef.current?.triggerShort();
   };
 
@@ -689,7 +690,7 @@ export default function App() {
     if (engineSnap.powered && K13_MODES.includes(engineSnap.mode)) {
       void engineRef.current?.setMode(next);
     } else {
-      engineRef.current?.playClick(false);
+      void engineRef.current?.wakeAndClick(false);
     }
   };
 
@@ -804,14 +805,17 @@ export default function App() {
       return { title: 'PTT · МИКР', subtitle: 'ГРОМКАЯ СВЯЗЬ' };
     }
     if (engineSnap.mode === 'pa') {
-      return { title: manPressed ? 'MANUAL' : 'PA', subtitle: manPressed ? `${sguSpec.manLabel} · РУЧНАЯ` : sguSpec.shortName };
+      return {
+        title: manPressed ? (sguSystem === 'k13' ? 'MANUAL' : 'WAIL') : 'PA',
+        subtitle: manPressed ? `${sguSpec.manLabel} · РУЧНАЯ` : sguSpec.shortName,
+      };
     }
     if (engineSnap.altActive && altTargetMode) {
       return { title: MODE_LABELS[altTargetMode], subtitle: `${sguSpec.manLabel} · СМЕНА` };
     }
-    if (manPressed && (engineSnap.mode === 'standby' || engineSnap.mode === 'radio')) {
+    if (manPressed && (engineSnap.mode === 'standby' || engineSnap.mode === 'radio' || sguSystem === 'k13')) {
       return {
-        title: 'MANUAL',
+        title: sguSystem === 'k13' ? 'MANUAL' : 'WAIL',
         subtitle: `${sguSpec.shortName} · ${sguSpec.manLabel}`,
       };
     }
@@ -827,21 +831,23 @@ export default function App() {
       title: foundLabel,
       subtitle: engineSnap.mode === 'standby' ? `${sguSpec.shortName} · ГОТОВ` : `${sguSpec.shortName} · АКТИВНО`,
     };
-  }, [engineSnap, hornPressed, pulsarPressed, k13ShortLit, manPressed, pttPressed, altTargetMode, activePhraseMeta, sguSpec]);
+  }, [engineSnap, hornPressed, pulsarPressed, k13ShortLit, manPressed, pttPressed, altTargetMode, activePhraseMeta, sguSpec, sguSystem]);
 
   const manIsLit = manPressed || (engineSnap.powered && (engineSnap.altActive || engineSnap.wolfActive));
   const hornIsLit = hornPressed || engineSnap.hornActive;
   const k13SirenActive = engineSnap.powered && K13_MODES.includes(engineSnap.mode);
-  const k13StatusText = k13ShortLit
+  const k13StatusText = !engineSnap.powered
+    ? 'Выкл'
+    : k13ShortLit
     ? 'Короткий'
     : hornIsLit
-    ? 'Гудок'
+    ? 'Кряк'
     : pulsarPressed
     ? 'Пульсар'
     : manPressed
     ? 'Ручная'
     : k13SirenActive
-    ? 'Сирена'
+    ? 'Играет'
     : 'Готов';
 
   // Exact symmetric circular horseshoe angles around the right MODE rotary knob
@@ -971,7 +977,7 @@ export default function App() {
                     <div className="grid grid-cols-3 gap-2.5">
                       <button
                         type="button"
-                        onClick={handleK13Short}
+                        onPointerDown={handleK13Short}
                         aria-pressed={k13ShortLit}
                         className={`k13-key no-select ${k13ShortLit ? 'lit-gold pressed' : ''}`}
                       >
@@ -1006,9 +1012,9 @@ export default function App() {
                       </button>
                     </div>
 
-                    {/* Signature Gold Divider & K-13 Status Line */}
-                    <div className="border-y border-[var(--sgu-line)]/55 py-1.5 px-2 flex items-center justify-between gap-2 bg-black/35 rounded-md">
-                      <div className="text-xs font-extrabold tracking-wide text-white/85">
+                    {/* Signature Gold Divider, K-13 Status Line & Dedicated Power Ring */}
+                    <div className="border-y border-[var(--sgu-line)]/55 py-1.5 px-2.5 flex items-center justify-between gap-2 bg-black/35 rounded-md">
+                      <div className="text-xs font-extrabold tracking-wide text-white/85 min-w-0 truncate">
                         Режим:{' '}
                         <span className="text-[var(--acc)]">
                           {MODE_LABELS[k13SirenActive ? engineSnap.mode : k13SelectedMode]}
@@ -1016,9 +1022,24 @@ export default function App() {
                         <span className="text-white/35 mx-1.5">|</span>
                         Статус: <span className="text-[var(--acc)]">{k13StatusText}</span>
                       </div>
-                      <span className="text-base sm:text-lg font-extrabold italic tracking-wide text-[var(--acc)] shrink-0">
-                        K-13
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-base sm:text-lg font-extrabold italic tracking-wide text-[var(--acc)]">
+                          K-13
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleTogglePower}
+                          aria-label={engineSnap.powered ? 'Выключить K-13' : 'Включить K-13'}
+                          aria-pressed={engineSnap.powered}
+                          className={`w-9 h-9 rounded-full border-2 flex items-center justify-center cursor-pointer active:scale-90 transition-all ${
+                            engineSnap.powered
+                              ? 'border-[var(--acc)] bg-[#2b220a] text-[var(--acc)] shadow-[0_0_12px_rgba(245,158,11,0.45)]'
+                              : 'border-white/25 bg-[#11141b] text-white/55'
+                          }`}
+                        >
+                          <Power className="w-4 h-4 stroke-[2.5]" aria-hidden="true" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Bottom Hardware Row: SIREN, MANUAL, MODE */}
@@ -1030,8 +1051,8 @@ export default function App() {
                         className={`k13-key no-select ${k13SirenActive ? 'lit-gold pressed' : ''}`}
                       >
                         <span className="text-xs sm:text-sm font-extrabold tracking-wider">SIREN</span>
-                        <span className="text-[10px] font-semibold text-white/55">
-                          {k13SirenActive ? 'Вкл' : 'Выкл'}
+                        <span className="text-[10px] font-semibold text-white/60">
+                          {k13SirenActive ? 'Играет' : 'Вкл / Выкл'}
                         </span>
                       </button>
 
@@ -1045,13 +1066,13 @@ export default function App() {
                         className={`k13-key no-select ${manIsLit ? 'lit-gold pressed' : ''}`}
                       >
                         <span className="text-xs sm:text-sm font-extrabold tracking-wider">MANUAL</span>
-                        <span className="text-[10px] font-semibold text-white/55">Удерж. / смена</span>
+                        <span className="text-[10px] font-semibold text-white/60">Ручная</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={handleK13CycleMode}
-                        className="k13-key no-select"
+                        className={`k13-key no-select ${k13SirenActive ? 'lit-gold' : ''}`}
                       >
                         <span className="text-xs sm:text-sm font-extrabold tracking-wider">MODE</span>
                         <span className="text-[10px] font-bold text-[var(--acc)]">

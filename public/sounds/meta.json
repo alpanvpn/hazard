@@ -304,15 +304,17 @@
   "trackStep": 0.02
  },
  "horn": {
-  "loopStart": 0.06,
+  "loopStart": 0.1197,
+  "loopEnd": 0.2493,
   "dur": 0.31376,
   "from": "v3 6.20–6.62 с",
-  "seam": 0.484
+  "seam": 0.0035
  },
  "tone": {
-  "loopStart": 0,
+  "loopStart": 0.1086,
+  "loopEnd": 0.1820,
   "dur": 0.50356,
-  "hz": 904.4,
+  "hz": 900.0,
   "from": "v1, ровный тон"
  },
  "wolf": {
