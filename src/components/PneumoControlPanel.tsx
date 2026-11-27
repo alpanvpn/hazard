@@ -305,14 +305,7 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
       return;
     }
 
-    const maxDelta = Math.max(
-      Math.abs(cur.fl - target.fl),
-      Math.abs(cur.fr - target.fr),
-      Math.abs(cur.rl - target.rl),
-      Math.abs(cur.rr - target.rr)
-    );
-    const travelMs = Math.max(240, Math.min(1600, Math.ceil(maxDelta / 0.2) * 55));
-    void audioEngine?.playPresetTransition(dir, travelMs);
+    void audioEngine?.playPresetTransition(dir, 650);
 
     presetTimerRef.current = window.setInterval(() => {
       let done = true;
