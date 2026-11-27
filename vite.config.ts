@@ -19,6 +19,7 @@ export default defineConfig(() => {
           'pwa-192x192.png',
           'pwa-512x512.png',
           'pwa-maskable-512x512.png',
+          'assets/aistudio/image_a1953bb7.png',
           'hazard-worklet.js',
           'sounds/meta.json',
           'sounds/*.wav',

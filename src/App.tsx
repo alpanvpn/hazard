@@ -5,6 +5,7 @@ import {
   Copy,
   Download,
   FileAudio,
+  Gauge,
   Lightbulb,
   Lock,
   Megaphone,
@@ -18,16 +19,18 @@ import {
   Waves,
   X,
 } from 'lucide-react';
+import { PneumoAudioEngine } from './audio/pneumoAudio';
 import { EngineSnapshot, PhraseId, SirenAudioEngine, SirenMode } from './audio/sirenEngine';
 import { DagestanEagleSticker } from './components/DagestanEagleSticker';
 import { LiveHzReadout, LiveLedBar } from './components/LevelTelemetry';
+import { PneumoControlPanel } from './components/PneumoControlPanel';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { BrandWatermark, RegionFlags, SITE_URL } from './components/RegionFlags';
 import { RotaryKnob } from './components/RotaryKnob';
 import { useWakeLock } from './hooks/useWakeLock';
 import { SGU_LIST, SGU_SYSTEMS, SguSystemId } from './types/sgu';
 
-type TabId = 'siren' | 'modes' | 'light' | 'fx';
+type TabId = 'siren' | 'modes' | 'pneumo' | 'light' | 'fx';
 type LightMode = '' | 'r' | 'w' | 'a';
 type UiTheme = 'hardware' | 'glass';
 type ManSirenBehavior = 'toggle' | 'hold';
@@ -279,7 +282,11 @@ export default function App() {
     activePhrase: null,
   });
 
+  const [pneumoStopSignal, setPneumoStopSignal] = useState(0);
+  const [pneumoEngine, setPneumoEngine] = useState<PneumoAudioEngine | null>(null);
+
   const engineRef = useRef<SirenAudioEngine | null>(null);
+  const pneumoRef = useRef<PneumoAudioEngine | null>(null);
   const telemetrySubsRef = useRef<Set<(hz: number, level: number) => void>>(new Set());
   const hornPointerRef = useRef<number | null>(null);
   const manPointerRef = useRef<number | null>(null);
@@ -336,8 +343,12 @@ export default function App() {
     engine.setMicDb(micDb);
     engine.setVolume(volume);
     engineRef.current = engine;
+    const pneumo = new PneumoAudioEngine(engine);
+    pneumoRef.current = pneumo;
+    setPneumoEngine(pneumo);
     void engine.prefetchAll();
     return () => {
+      pneumo.stopAll();
       void engine.stopAll();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -656,6 +667,8 @@ export default function App() {
     setHornPressed(false);
     setManPressed(false);
     setPttPressed(false);
+    setPneumoStopSignal((n) => n + 1);
+    pneumoRef.current?.stopAll();
     triggerHaptic([18, 28, 18]);
     void engineRef.current?.stopAll();
   };
@@ -722,14 +735,14 @@ export default function App() {
       return { title: 'PTT · МИКР', subtitle: 'ГРОМКАЯ СВЯЗЬ' };
     }
     if (engineSnap.mode === 'pa') {
-      return { title: 'PA', subtitle: manPressed ? 'ТРЕЛЬ MAN' : sguSpec.shortName };
+      return { title: manPressed ? 'PULSAR' : 'PA', subtitle: manPressed ? `${sguSpec.manLabel} · ТРЕЛЬ` : sguSpec.shortName };
     }
     if (engineSnap.altActive && altTargetMode) {
       return { title: MODE_LABELS[altTargetMode], subtitle: `${sguSpec.manLabel} · СМЕНА` };
     }
     if (manPressed && (engineSnap.mode === 'standby' || engineSnap.mode === 'radio')) {
       return {
-        title: sguSystem === 'hazard' ? 'WAIL' : 'РУЧНАЯ',
+        title: sguSystem === 'hazard' ? 'MANUAL' : 'РУЧНАЯ',
         subtitle: `${sguSpec.shortName} · ${sguSpec.manLabel}`,
       };
     }
@@ -867,7 +880,7 @@ export default function App() {
               </div>
 
               {/* Golden Dagestan Eagle Metallic Vinyl Sticker on Top-Right Corner */}
-              <DagestanEagleSticker className="absolute -top-2 -right-1.5 sm:-top-2.5 sm:-right-2 z-20 w-13 h-13 sm:w-16 sm:h-16 rotate-[8deg]" />
+              <DagestanEagleSticker className="absolute -top-2.5 -right-2 sm:-top-3 sm:-right-2.5 z-20 w-14 h-14 sm:w-[68px] sm:h-[68px] rotate-[8deg]" />
 
               <div className="sgu-inner-frame">
                 {/* Top Zone: Larger Aligned OFF/VOL Knob & Circular Mode Dial Arena */}
@@ -1022,42 +1035,56 @@ export default function App() {
                   </span>
                 </div>
 
-                {/* Bottom Zone: Left RJ45 Mic Socket (PTT) + Right Yellow-Framed White Square Keys (MAN / HORN) */}
-                <div className="grid grid-cols-[1fr_1.18fr] gap-2.5 items-end pt-2">
-                  <button
-                    type="button"
-                    onPointerDown={(e) => void onPttDown(e)}
-                    onPointerUp={onPttUp}
-                    onPointerCancel={onPttUp}
-                    onLostPointerCapture={onPttUp}
-                    aria-label={`${sguSpec.pttLabel}: удерживайте для громкой связи`}
-                    aria-pressed={pttPressed}
-                    className={`hw-mic-socket no-select ${pttPressed ? 'lit pressed' : ''}`}
-                  >
-                    <div className="rj45-port" aria-hidden="true">
-                      <span className="rj45-pin" />
-                      <span className="rj45-pin" />
-                      <span className="rj45-pin" />
-                      <span className="rj45-pin" />
-                      <span className="rj45-pin" />
-                      <span className="rj45-pin" />
-                      <span className="rj45-latch" />
-                    </div>
-                    <div className="text-left min-w-0">
-                      <span
-                        className="block text-xs sm:text-[13px] font-extrabold tracking-wide leading-tight truncate"
-                        style={{ color: pttPressed ? '#fb7185' : sguSpec.accentColor }}
+                {/* Bottom Zone: Left RJ45 Mic Socket (PTT) + Right Enlarged White Keys (MAN / HORN) */}
+                <div className="grid grid-cols-[0.84fr_1.36fr] gap-2.5 items-end pt-2">
+                  <div className="flex flex-col gap-1.5">
+                    {sguSystem === 'k13' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          triggerHaptic(12);
+                          void engineRef.current?.triggerShort();
+                        }}
+                        className="siren-btn active min-h-[38px] py-1.5 px-2 text-xs font-extrabold tracking-widest"
                       >
-                        {sguSpec.pttLabel}
-                      </span>
-                      <span className="block text-[10.5px] font-semibold text-white/70 leading-tight truncate">
-                        Держи · ГГС
-                      </span>
-                    </div>
-                  </button>
+                        SHORT
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onPointerDown={(e) => void onPttDown(e)}
+                      onPointerUp={onPttUp}
+                      onPointerCancel={onPttUp}
+                      onLostPointerCapture={onPttUp}
+                      aria-label={`${sguSpec.pttLabel}: удерживайте для громкой связи`}
+                      aria-pressed={pttPressed}
+                      className={`hw-mic-socket no-select ${pttPressed ? 'lit pressed' : ''}`}
+                    >
+                      <div className="rj45-port" aria-hidden="true">
+                        <span className="rj45-pin" />
+                        <span className="rj45-pin" />
+                        <span className="rj45-pin" />
+                        <span className="rj45-pin" />
+                        <span className="rj45-pin" />
+                        <span className="rj45-pin" />
+                        <span className="rj45-latch" />
+                      </div>
+                      <div className="text-left min-w-0">
+                        <span
+                          className="block text-xs sm:text-[13px] font-extrabold tracking-wide leading-tight truncate"
+                          style={{ color: pttPressed ? '#fb7185' : sguSpec.accentColor }}
+                        >
+                          {sguSpec.pttLabel}
+                        </span>
+                        <span className="block text-[10px] font-semibold text-white/70 leading-tight truncate">
+                          Держи · ГГС
+                        </span>
+                      </div>
+                    </button>
+                  </div>
 
                   <div className="hw-keys-bezel">
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2.5">
                       <div className="flex flex-col items-center gap-1">
                         <span
                           className="text-[11px] font-extrabold tracking-wider leading-none"
@@ -1077,7 +1104,7 @@ export default function App() {
                             manPressed ? 'pressed' : ''
                           }`}
                         >
-                          <span className="text-xs font-extrabold tracking-wide opacity-85">
+                          <span className="text-sm sm:text-[15px] font-extrabold tracking-wide">
                             {sguSpec.manLabel}
                           </span>
                         </button>
@@ -1102,7 +1129,7 @@ export default function App() {
                             hornPressed ? 'pressed' : ''
                           }`}
                         >
-                          <span className="text-xs font-extrabold tracking-wide opacity-85">
+                          <span className="text-sm sm:text-[15px] font-extrabold tracking-wide">
                             {sguSpec.hornLabel}
                           </span>
                         </button>
@@ -1245,6 +1272,18 @@ export default function App() {
                   </button>
                 )}
               </div>
+            </section>
+
+            {/* 4-Zone Pneumo Control Section */}
+            <section
+              aria-label="Пневмоподвеска"
+              className={activeTab === 'pneumo' ? 'block' : 'hidden lg:block'}
+            >
+              <PneumoControlPanel
+                audioEngine={pneumoEngine}
+                onHaptic={triggerHaptic}
+                stopSignal={pneumoStopSignal}
+              />
             </section>
 
             {/* Lightbar Section */}
@@ -1457,12 +1496,13 @@ export default function App() {
       {/* Compact Mobile Bottom Navigation */}
       <nav
         aria-label="Разделы пульта"
-        className="bottom-dock lg:hidden fixed left-1/2 -translate-x-1/2 bottom-[calc(6px+env(safe-area-inset-bottom))] w-[min(420px,calc(100%-16px))] flex p-1 rounded-[18px] z-20"
+        className="bottom-dock lg:hidden fixed left-1/2 -translate-x-1/2 bottom-[calc(6px+env(safe-area-inset-bottom))] w-[min(440px,calc(100%-12px))] grid grid-cols-5 p-1 rounded-[18px] z-20"
       >
         {(
           [
             { id: 'siren', label: 'Сирена', icon: Radio, pro: false },
             { id: 'modes', label: 'СГУ', icon: Waves, pro: true },
+            { id: 'pneumo', label: 'Пневма', icon: Gauge, pro: false },
             { id: 'light', label: 'Свет', icon: Lightbulb, pro: true },
             { id: 'fx', label: 'FX', icon: Sliders, pro: true },
           ] as const
@@ -1477,7 +1517,7 @@ export default function App() {
               onClick={() => handleTabSelect(item.id, item.pro)}
               aria-label={locked ? `${item.label} (закрыто)` : item.label}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex-1 min-h-[44px] flex flex-col items-center justify-center rounded-[14px] transition-colors relative cursor-pointer ${
+              className={`min-h-[44px] flex flex-col items-center justify-center rounded-[14px] transition-colors relative cursor-pointer ${
                 isActive ? 'bg-white/15 text-[var(--acc)]' : 'text-[var(--dim)]'
               }`}
             >
@@ -1490,7 +1530,7 @@ export default function App() {
                   />
                 )}
               </div>
-              <span className="text-[11px] font-bold mt-0.5 whitespace-nowrap">{item.label}</span>
+              <span className="text-[10.5px] font-bold mt-0.5 whitespace-nowrap">{item.label}</span>
             </button>
           );
         })}

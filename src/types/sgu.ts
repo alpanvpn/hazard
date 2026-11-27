@@ -1,6 +1,6 @@
 import type { SirenMode } from '../audio/sirenEngine';
 
-export type SguSystemId = 'hazard' | 'grach' | 'elina' | 'bars';
+export type SguSystemId = 'hazard' | 'k13' | 'grach' | 'elina' | 'bars';
 
 export interface SguSystemSpec {
   id: SguSystemId;
@@ -41,6 +41,27 @@ export const SGU_SYSTEMS: Record<SguSystemId, SguSystemSpec> = {
       { mode: 'wail', label: 'WAIL' },
       { mode: 'pa', label: 'PA' },
       { mode: 'radio', label: 'RADIO' },
+    ],
+  },
+  k13: {
+    id: 'k13',
+    name: 'СГУ «K-13» (ГИБДД)',
+    shortName: 'СГУ K-13',
+    brandTop: 'ГИБДД',
+    brandBottom: 'K-13',
+    modelCode: 'K-13',
+    tagline: 'Как на видео · быстрый SHORT · чёткий PULSAR · MANUAL · HORN',
+    accentColor: '#f59e0b',
+    manLabel: 'MANUAL',
+    hornLabel: 'HORN',
+    pttLabel: 'ГГС',
+    modes: [
+      { mode: 'standby', label: 'ВЫКЛ' },
+      { mode: 'phaser', label: 'PULSAR' },
+      { mode: 'yelp', label: 'YELP' },
+      { mode: 'wail', label: 'WAIL' },
+      { mode: 'hilo', label: 'HILO' },
+      { mode: 'pa', label: 'PA' },
     ],
   },
   grach: {
@@ -110,6 +131,7 @@ export const SGU_SYSTEMS: Record<SguSystemId, SguSystemSpec> = {
 
 export const SGU_LIST: SguSystemSpec[] = [
   SGU_SYSTEMS.hazard,
+  SGU_SYSTEMS.k13,
   SGU_SYSTEMS.grach,
   SGU_SYSTEMS.elina,
   SGU_SYSTEMS.bars,

@@ -158,7 +158,7 @@ export class SirenAudioEngine {
   private toneFreq = 6000;
   private micDb = 18;
   private sessionType: 'ambient' | 'playback' = 'playback';
-  private sguSystem: 'hazard' | 'grach' | 'elina' | 'bars' = 'hazard';
+  private sguSystem: 'hazard' | 'k13' | 'grach' | 'elina' | 'bars' = 'hazard';
 
   private currentHz = 0;
   private currentHorn = false;
@@ -668,9 +668,29 @@ export class SirenAudioEngine {
     }
   }
 
-  public setSguSystem(id: 'hazard' | 'grach' | 'elina' | 'bars') {
+  public setSguSystem(id: 'hazard' | 'k13' | 'grach' | 'elina' | 'bars') {
     this.sguSystem = id;
     this.sendFn?.({ type: 'sgu', id });
+  }
+
+  public async ensureAudioBus(): Promise<{ ctx: AudioContext; destination: AudioNode } | null> {
+    await this.ensureStarted();
+    if (!this.ctx || !this.masterGain) return null;
+    if (this.ctx.state !== 'running') {
+      await this.ctx.resume().catch(() => {});
+    }
+    return { ctx: this.ctx, destination: this.masterGain };
+  }
+
+  public async triggerShort(): Promise<void> {
+    if (!this.powered) this.powered = true;
+    this.pushState();
+    this.emit();
+    await this.ensureStarted();
+    this.playClick(true);
+    this.sendFn?.({ type: 'short' });
+    this.pushState();
+    this.emit();
   }
 
   private getEffectiveTone(): number {
