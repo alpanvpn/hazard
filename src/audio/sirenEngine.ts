@@ -5,18 +5,7 @@ export type SirenMode =
   | 'wail'
   | 'pa'
   | 'radio'
-  | 'phaser'
-  | 'piercer'
-  | 'rumbler'
-  | 'usa'
-  | 'airraid'
-  | 'fast'
-  | 'grach'
-  | 'elina'
-  | 'smerch'
-  | 'bars'
-  | 'patriot'
-  | 'mega';
+  | 'phaser';
 
 // Numeric tone codes matching HazardSynth inside public/hazard-worklet.js
 const TONE_CODE: Record<SirenMode, number> = {
@@ -27,17 +16,6 @@ const TONE_CODE: Record<SirenMode, number> = {
   yelp: 2,
   hilo: 3,
   phaser: 4,
-  fast: 5,
-  piercer: 6,
-  rumbler: 7,
-  airraid: 8,
-  usa: 9,
-  mega: 9,
-  grach: 10,
-  elina: 11,
-  smerch: 12,
-  bars: 13,
-  patriot: 14,
 };
 
 export type PhraseId =
@@ -137,9 +115,8 @@ export class SirenAudioEngine {
 
   private startPromise: Promise<void> | null = null;
   private ready = false;
-  private recReady = false;
   private loadedCount = 0;
-  private readonly totalCount = 6; // wail, yelp, phaser, horn, tone, wolf
+  private readonly totalCount = 6;
 
   private powered = false;
   private mode: SirenMode = 'standby';
@@ -147,6 +124,7 @@ export class SirenAudioEngine {
   private manStyle: 'siren' | 'wolf' = 'siren';
   private manSiren: 'toggle' | 'hold' = 'hold';
   private manHeld = false;
+  private pulsarHeld = false;
   private hornHeld = false;
   private pttHeld = false;
   private beepEnabled = true;
@@ -155,10 +133,10 @@ export class SirenAudioEngine {
   private fxBoost = 1.0;
   private echoLevel = 0;
   private tunnelLevel = 0;
-  private toneFreq = 6000;
+  private toneFreq = 4600;
   private micDb = 18;
   private sessionType: 'ambient' | 'playback' = 'playback';
-  private sguSystem: 'hazard' | 'k13' | 'grach' | 'elina' | 'bars' = 'hazard';
+  private sguSystem: 'hazard' | 'k13' = 'hazard';
 
   private currentHz = 0;
   private currentHorn = false;
@@ -310,7 +288,6 @@ export class SirenAudioEngine {
       if (this.ctx.state !== 'running') {
         this.ctx.resume().catch(() => {});
       }
-      // Tiny silent buffer inside gesture wakes iOS Web Audio output cleanly
       const b = this.ctx.createBuffer(1, 1, this.ctx.sampleRate || 44100);
       const s = this.ctx.createBufferSource();
       s.buffer = b;
@@ -328,9 +305,8 @@ export class SirenAudioEngine {
     this.toneFilter = ctx.createBiquadFilter();
     this.toneFilter.type = 'lowpass';
     this.toneFilter.frequency.value = this.toneFreq;
-    this.toneFilter.Q.value = 0.7;
+    this.toneFilter.Q.value = 0.65;
 
-    // Gentle subsonic highpass preserves authentic low-mid body of Hazard 7007 recordings
     const hornHp = ctx.createBiquadFilter();
     hornHp.type = 'highpass';
     hornHp.frequency.value = 85;
@@ -354,27 +330,27 @@ export class SirenAudioEngine {
     this.masterGain = ctx.createGain();
     this.masterGain.gain.value = this.volCurve(this.volume);
 
-    // FX Boost / Maximizer stage allows pushing volume up to 250% MAX cleanly without clipping
     this.fxGainNode = ctx.createGain();
     this.fxGainNode.gain.value = this.fxBoost;
 
     this.limiter = ctx.createDynamicsCompressor();
-    this.limiter.threshold.value = -1.2;
-    this.limiter.knee.value = 3;
+    this.limiter.threshold.value = -1.5;
+    this.limiter.knee.value = 4;
     this.limiter.ratio.value = 16;
-    this.limiter.attack.value = 0.0015;
+    this.limiter.attack.value = 0.002;
     this.limiter.release.value = 0.06;
 
     this.analyser = ctx.createAnalyser();
     this.analyser.fftSize = 2048;
     this.analyser.smoothingTimeConstant = 0.3;
 
-    // Precompute tiny 4ms physical microswitch impulse click (zero oscillator synthesis)
-    const cLen = Math.max(32, Math.floor(ctx.sampleRate * 0.004));
+    // Soft, damped 7ms tactile relay thump (no harsh static white noise ticks)
+    const cLen = Math.max(64, Math.floor(ctx.sampleRate * 0.007));
     const cBuf = ctx.createBuffer(1, cLen, ctx.sampleRate);
     const cData = cBuf.getChannelData(0);
     for (let i = 0; i < cLen; i++) {
-      cData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (cLen * 0.28)) * 0.45;
+      const t = i / ctx.sampleRate;
+      cData[i] = Math.sin(2 * Math.PI * 165 * t) * Math.exp(-t / 0.0018) * 0.24;
     }
     this.clickBuffer = cBuf;
 
@@ -402,7 +378,6 @@ export class SirenAudioEngine {
     this.radioGate.gain.value = 0;
     this.radioGate.connect(this.masterGain);
 
-    // Persistent СГУ speaker presence chain for natural human phrases
     const phraseHp = ctx.createBiquadFilter();
     phraseHp.type = 'highpass';
     phraseHp.frequency.value = 240;
@@ -450,7 +425,6 @@ export class SirenAudioEngine {
     if (!win.HazardSynth) return null;
     const syn = new win.HazardSynth(ctx.sampleRate);
     syn.onStat = (m) => this.handleStat(m);
-    // 0 inputs is critical on iOS/macOS WebKit so onaudioprocess always fires
     const sp = ctx.createScriptProcessor(1024, 0, 1);
     const blk = new Float32Array(128);
     sp.onaudioprocess = (e) => {
@@ -534,7 +508,6 @@ export class SirenAudioEngine {
 
     this.ready = true;
     this.sendFn?.({ type: 'sgu', id: this.sguSystem });
-    // Decode real recorded WAVs immediately before playing audio so zero synthetic tones emit
     await this.loadHazardSamples();
     this.pushState();
     if (ctx.state !== 'running') {
@@ -542,7 +515,6 @@ export class SirenAudioEngine {
     }
     this.emit();
 
-    // Safari WebKit safety watchdog: if AudioWorklet didn't emit a heartbeat within 500ms, switch to ScriptProcessor
     if (usingWorklet && typeof window !== 'undefined') {
       window.setTimeout(async () => {
         if (this.workletStatSeen || !this.ctx || !this.toneFilter) return;
@@ -571,7 +543,6 @@ export class SirenAudioEngine {
         ? inline.meta
         : this.metaCache ?? ((await (await fetch('sounds/meta.json')).json()) as Record<string, MetaEntry>);
       const names = ['wail', 'yelp', 'phaser', 'horn', 'tone'] as const;
-      let ok = 0;
 
       await Promise.all(
         names.map(async (name) => {
@@ -611,7 +582,6 @@ export class SirenAudioEngine {
               },
               [pcmTransfer.buffer]
             );
-            ok++;
             this.loadedCount++;
             this.emit();
           } catch {
@@ -620,9 +590,6 @@ export class SirenAudioEngine {
         })
       );
 
-      this.recReady = ok === names.length;
-
-      // Load wolf.wav in background (using pre-cached buffer if available)
       const loadWolf = async () => {
         try {
           let ab: ArrayBuffer | null = null;
@@ -659,7 +626,6 @@ export class SirenAudioEngine {
     const horn = Boolean(m.horn);
     const wolf = Boolean(m.wolf);
     this.currentHz = f;
-    // Notify lightweight LED/Hz meters directly without re-rendering full React tree 25x/sec
     this.onTelemetry?.(this.powered ? f : 0, this.getMeterLevel());
     if (horn !== this.currentHorn || wolf !== this.currentWolf) {
       this.currentHorn = horn;
@@ -668,7 +634,7 @@ export class SirenAudioEngine {
     }
   }
 
-  public setSguSystem(id: 'hazard' | 'k13' | 'grach' | 'elina' | 'bars') {
+  public setSguSystem(id: 'hazard' | 'k13') {
     this.sguSystem = id;
     this.sendFn?.({ type: 'sgu', id });
   }
@@ -687,39 +653,49 @@ export class SirenAudioEngine {
     this.pushState();
     this.emit();
     await this.ensureStarted();
-    this.playClick(true);
     this.sendFn?.({ type: 'short' });
+    this.pushState();
+    this.emit();
+  }
+
+  public async pressPulsar(): Promise<void> {
+    if (!this.powered) this.powered = true;
+    this.pulsarHeld = true;
+    this.pushState();
+    this.emit();
+    await this.ensureStarted();
+    this.pushState();
+    this.emit();
+  }
+
+  public releasePulsar(): void {
+    if (!this.pulsarHeld) return;
+    this.pulsarHeld = false;
     this.pushState();
     this.emit();
   }
 
   private getEffectiveTone(): number {
     if (!this.powered) return 0;
+    if (this.pulsarHeld) {
+      return TONE_CODE.phaser;
+    }
     if (this.altActive) {
       if (this.mode === 'hilo') return TONE_CODE.wail;
       if (this.mode === 'yelp') return TONE_CODE.phaser;
       if (this.mode === 'wail') return TONE_CODE.yelp;
-      if (this.mode === 'grach') return TONE_CODE.smerch;
-      if (this.mode === 'smerch') return TONE_CODE.grach;
-      if (this.mode === 'elina') return TONE_CODE.phaser;
-      if (this.mode === 'phaser') return TONE_CODE.elina;
-      if (this.mode === 'bars') return TONE_CODE.patriot;
-      if (this.mode === 'patriot') return TONE_CODE.bars;
-      if (this.mode === 'rumbler') return TONE_CODE.bars;
+      if (this.mode === 'phaser') return TONE_CODE.yelp;
     }
     return TONE_CODE[this.mode] || 0;
   }
 
   private isPrimarySirenMode(m: SirenMode): boolean {
-    return (
-      m !== 'standby' &&
-      m !== 'pa' &&
-      m !== 'radio'
-    );
+    return m !== 'standby' && m !== 'pa' && m !== 'radio';
   }
 
-  private getManRole(): 'off' | 'manual' | 'pa' | 'wolf' {
+  private getManRole(): 'off' | 'manual' | 'pa' | 'wolf' | 'pulsar' {
     if (!this.powered) return 'off';
+    if (this.pulsarHeld) return 'pulsar';
     if (this.mode === 'pa') return 'pa';
     if (this.mode === 'standby' || this.mode === 'radio') {
       return this.manStyle === 'wolf' ? 'wolf' : 'manual';
@@ -730,7 +706,6 @@ export class SirenAudioEngine {
   private pushState() {
     if (!this.ready || !this.sendFn) return;
     const role = this.getManRole();
-    // Only live PTT microphone mutes the siren output; voice phrases play freely over/alongside active sirens & buttons
     const mute = this.pttHeld && !!this.micStream;
     this.sendFn({
       type: 'state',
@@ -740,11 +715,11 @@ export class SirenAudioEngine {
         horn: this.hornHeld,
         mute,
         man: role === 'wolf' ? 'off' : role,
-        manHeld: this.manHeld,
+        manHeld: this.manHeld || this.pulsarHeld,
       },
     });
 
-    const manSounds = this.manHeld && role !== 'off';
+    const manSounds = (this.manHeld || this.pulsarHeld) && role !== 'off';
     if (this.ctx && this.radioGate) {
       this.ramp(
         this.radioGate.gain,
@@ -772,7 +747,7 @@ export class SirenAudioEngine {
     const src = this.ctx.createBufferSource();
     src.buffer = this.clickBuffer;
     const g = this.ctx.createGain();
-    g.gain.value = strong ? 0.35 : 0.2;
+    g.gain.value = strong ? 0.22 : 0.14;
     src.connect(g);
     g.connect(this.masterGain);
     src.start(0);
@@ -784,6 +759,7 @@ export class SirenAudioEngine {
     if (!on) {
       this.hornHeld = false;
       this.manHeld = false;
+      this.pulsarHeld = false;
       this.pttHeld = false;
       this.mode = 'standby';
       this.stopPhrase(true);
@@ -792,7 +768,7 @@ export class SirenAudioEngine {
     this.emit();
     await this.ensureStarted();
     if (this.powered) {
-      this.playClick(true);
+      this.playClick(false);
     }
     this.pushState();
     this.emit();
@@ -810,7 +786,7 @@ export class SirenAudioEngine {
     this.pushState();
     this.emit();
     await this.ensureStarted();
-    this.playClick(true);
+    this.playClick(false);
     this.pushState();
     this.emit();
   }
@@ -830,7 +806,6 @@ export class SirenAudioEngine {
       this.pushState();
       this.emit();
       await this.ensureStarted();
-      this.playClick(false);
       this.pushState();
       this.emit();
       return;
@@ -1042,7 +1017,6 @@ export class SirenAudioEngine {
 
     await this.ensureStarted();
     if (!this.ctx || !this.phraseInput || this.phraseToken !== token) return;
-    this.playClick(true);
 
     try {
       const buf = await this.decodePhrase(id);
@@ -1110,6 +1084,7 @@ export class SirenAudioEngine {
     this.mode = 'standby';
     this.altActive = false;
     this.manHeld = false;
+    this.pulsarHeld = false;
     this.hornHeld = false;
     this.pttHeld = false;
     this.stopPhrase(true);

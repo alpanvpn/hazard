@@ -37,12 +37,9 @@
   --radius-card: 22px;
 }
 
-/* SGU Hardware Accent Overrides */
+/* SGU Hardware Accent Overrides (Only Hazard 7007 & K-13) */
 [data-sgu="hazard"] { --sgu-line: #e9be18; --sgu-label: #f4cc2a; }
 [data-sgu="k13"]    { --sgu-line: #f59e0b; --sgu-label: #fbbf24; }
-[data-sgu="grach"]  { --sgu-line: #ef4444; --sgu-label: #f87171; }
-[data-sgu="elina"]  { --sgu-line: #38bdf8; --sgu-label: #7dd3fc; }
-[data-sgu="bars"]   { --sgu-line: #f97316; --sgu-label: #fb923c; }
 
 * {
   box-sizing: border-box;
@@ -133,7 +130,7 @@ body.siren-active .bg-mesh::after {
 }
 
 /* ============================================================
-   Authentic Premier Hazard 7007 SGU Hardware Console (Compact & Tight)
+   Authentic Premier Hazard 7007 & K-13 Hardware Consoles
    ============================================================ */
 .sgu-chassis {
   position: relative;
@@ -156,7 +153,6 @@ body.siren-active .bg-mesh::after {
   box-shadow: var(--surface-shadow);
 }
 
-/* Side Mounting Ears (visible cleanly on wider screens without cramping phones) */
 .sgu-ear {
   position: absolute;
   top: 50%;
@@ -190,7 +186,6 @@ body.siren-active .bg-mesh::after {
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.9);
 }
 
-/* Signature Inner Accent Border Line (Yellow on Hazard, Color-Matched per SGU) */
 .sgu-inner-frame {
   position: relative;
   border-radius: 10px;
@@ -202,7 +197,6 @@ body.siren-active .bg-mesh::after {
     0 0 14px color-mix(in srgb, var(--sgu-line, #e9be18) 12%, transparent);
 }
 
-/* Manufacturer badge ("PREMIER HAZARD" / "ЭЛЕКТ ГРАЧ" etc.) */
 .hazard-badge {
   display: inline-flex;
   flex-direction: column;
@@ -213,6 +207,54 @@ body.siren-active .bg-mesh::after {
   background: rgba(0, 0, 0, 0.55);
   line-height: 1.08;
   border-radius: 5px;
+}
+
+/* K-13 6-Button Tactile Console Keys (Black/Gold Alpan Style) */
+.k13-key {
+  min-height: 70px;
+  border-radius: 10px;
+  border: 1.5px solid #2e3442;
+  border-bottom: 5px solid #090b0f;
+  background: linear-gradient(180deg, #1b1f29 0%, #10131a 65%, #0a0c10 100%);
+  color: #f4f6f9;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transition: transform 0.06s ease, border-bottom-width 0.06s ease, border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+  touch-action: manipulation;
+}
+.k13-key:active,
+.k13-key.pressed {
+  transform: translateY(3px);
+  border-bottom-width: 2px;
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.85),
+    inset 0 2px 5px rgba(0, 0, 0, 0.45);
+}
+.k13-key.lit-gold {
+  border-color: #f59e0b;
+  border-bottom-color: #92400e;
+  background: linear-gradient(180deg, #3b2b0a 0%, #201604 100%);
+  color: #fde68a;
+  box-shadow:
+    0 0 18px rgba(245, 158, 11, 0.45),
+    0 5px 12px rgba(0, 0, 0, 0.78);
+}
+.k13-key.lit-red {
+  border-color: #fb7185;
+  border-bottom-color: #881337;
+  background: linear-gradient(180deg, #4c111e 0%, #27070e 100%);
+  color: #ffe4e6;
+  box-shadow:
+    0 0 18px rgba(244, 63, 94, 0.5),
+    0 5px 12px rgba(0, 0, 0, 0.78);
 }
 
 /* ============================================================
@@ -311,7 +353,7 @@ body.siren-active .bg-mesh::after {
   box-shadow: 0 0 7px rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.9);
 }
 
-/* Circular Horseshoe Mode Selector Arena (Larger Scale) */
+/* Circular Horseshoe Mode Selector Arena */
 .sgu-mode-arena {
   position: relative;
   width: 100%;
@@ -486,7 +528,7 @@ body.siren-active .bg-mesh::after {
     0 5px 12px rgba(0, 0, 0, 0.72);
 }
 
-/* Tactile Standard Buttons (Phrases, Tabs, Modals, Settings) */
+/* Tactile Standard Buttons */
 .siren-btn {
   border: 1px solid #353b4a;
   border-bottom: 2.5px solid #08090c;
@@ -513,6 +555,17 @@ body.siren-active .bg-mesh::after {
   border-color: var(--sgu-line, #e9be18);
   color: #fef08a;
   box-shadow: 0 0 14px rgba(233, 190, 24, 0.28);
+}
+
+/* Solid Gold Preset/Active Accent Button (for Pneumo Presets & Active Compressor) */
+.siren-btn.gold-solid {
+  background: linear-gradient(180deg, #f5ce2c 0%, #d4a308 100%);
+  border-color: #fde047;
+  border-bottom-color: #854d0e;
+  color: #140f02;
+  box-shadow:
+    0 4px 12px rgba(234, 179, 8, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .siren-btn.horn-active {
@@ -565,5 +618,5 @@ body.gated #app-shell {
   .sgu-mode-arena { height: 158px; }
   .arc-mode-btn { font-size: 10.5px; padding: 3px 4px; }
   .hw-white-key { height: 66px; }
+  .k13-key { min-height: 62px; }
 }
-

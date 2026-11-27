@@ -17,7 +17,7 @@ export interface PneumoPressures {
 
 const MAX_BAR = 8.0;
 const PRESET_1: PneumoPressures = { fl: 2.0, fr: 2.0, rl: 1.8, rr: 1.8 };
-const PRESET_2: PneumoPressures = { fl: 6.2, fr: 6.2, rl: 5.4, rr: 5.4 };
+const PRESET_2: PneumoPressures = { fl: 6.3, fr: 6.3, rl: 5.8, rr: 5.8 };
 const INITIAL_PRESSURES: PneumoPressures = { fl: 6.3, fr: 6.3, rl: 3.9, rr: 3.9 };
 
 const clampBar = (v: number) => Math.max(0, Math.min(MAX_BAR, Math.round(v * 10) / 10));
@@ -57,7 +57,6 @@ const CornerGauge: React.FC<CornerGaugeProps> = ({ label, value, active }) => {
   const ratio = Math.max(0, Math.min(1, value / MAX_BAR));
   const r = 24;
   const c = 2 * Math.PI * r;
-  // 250-degree open-bottom horseshoe arc
   const arcLen = c * (250 / 360);
   const filled = arcLen * ratio;
 
@@ -114,7 +113,6 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
   stopSignal = 0,
 }) => {
   const [pressures, setPressures] = useState<PneumoPressures>(readSavedPressures);
-  const [tankBar, setTankBar] = useState<number>(8.2);
   const [compressorOn, setCompressorOn] = useState<boolean>(false);
   const [activeControl, setActiveControl] = useState<
     null | 'front-up' | 'front-down' | 'rear-up' | 'rear-down'
@@ -152,7 +150,6 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
     }
   }, []);
 
-  // Emergency cutoff from global СТОП ВСЁ
   useEffect(() => {
     if (stopSignal > 0) {
       stopAxleHold();
@@ -162,7 +159,6 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
     }
   }, [stopSignal, stopAxleHold, clearPresetAnim, audioEngine]);
 
-  // Global pointer release safety so axle air dump/fill never sticks
   useEffect(() => {
     const onGlobalUp = () => {
       if (pointerIdRef.current !== null || holdTimerRef.current !== null) {
@@ -179,24 +175,28 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
     };
   }, [stopAxleHold]);
 
-  // Compressor loop: refills tank & smoothly boosts bags gently if running
+  // Compressor gently raises low bags up toward working pressure (6.3 front / 5.8 rear, like 00:35-00:37 in video)
+  // and turns off automatically when finished
   useEffect(() => {
     void audioEngine?.setCompressorSound(compressorOn);
     if (!compressorOn) return;
 
     const id = window.setInterval(() => {
-      setTankBar((prev) => Math.min(10.0, Math.round((prev + 0.1) * 10) / 10));
+      let reached = true;
       setPressures((prev) => {
-        // Gentle pressure top-up when compressor runs (like 00:35-00:37 in video)
         const next: PneumoPressures = {
-          fl: prev.fl < 6.4 ? clampBar(prev.fl + 0.1) : prev.fl,
-          fr: prev.fr < 6.4 ? clampBar(prev.fr + 0.1) : prev.fr,
+          fl: prev.fl < 6.3 ? clampBar(prev.fl + 0.1) : prev.fl,
+          fr: prev.fr < 6.3 ? clampBar(prev.fr + 0.1) : prev.fr,
           rl: prev.rl < 5.8 ? clampBar(prev.rl + 0.1) : prev.rl,
           rr: prev.rr < 5.8 ? clampBar(prev.rr + 0.1) : prev.rr,
         };
+        reached = next.fl >= 6.3 && next.fr >= 6.3 && next.rl >= 5.8 && next.rr >= 5.8;
         return next;
       });
-    }, 320);
+      if (reached) {
+        setCompressorOn(false);
+      }
+    }, 340);
 
     return () => {
       window.clearInterval(id);
@@ -219,6 +219,11 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
     clearPresetAnim();
     setActivePreset(null);
 
+    // Dropping air immediately cancels compressor so compressor never fights lowering
+    if (dir === 'down' && compressorOn) {
+      setCompressorOn(false);
+    }
+
     if (holdTimerRef.current !== null) {
       window.clearInterval(holdTimerRef.current);
       holdTimerRef.current = null;
@@ -236,6 +241,14 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
     onHaptic(12);
 
     const delta = dir === 'up' ? 0.2 : -0.2;
+    const canMoveNow = () => {
+      const cur = pressuresRef.current;
+      if (axle === 'front') {
+        return dir === 'up' ? cur.fl < MAX_BAR || cur.fr < MAX_BAR : cur.fl > 0 || cur.fr > 0;
+      }
+      return dir === 'up' ? cur.rl < MAX_BAR || cur.rr < MAX_BAR : cur.rl > 0 || cur.rr > 0;
+    };
+
     const applyStep = () => {
       let moved = false;
       setPressures((prev) => {
@@ -250,13 +263,17 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
         moved = nrl !== prev.rl || nrr !== prev.rr;
         return { ...prev, rl: nrl, rr: nrr };
       });
-      if (dir === 'up' && moved) {
-        setTankBar((t) => Math.max(4.0, Math.round((t - 0.05) * 10) / 10));
+      if (!moved) {
+        audioEngine?.stopAir();
       }
     };
 
+    if (canMoveNow()) {
+      void audioEngine?.startAir(dir === 'down' ? 'dump' : 'fill');
+    } else {
+      audioEngine?.playValveClick(false);
+    }
     applyStep();
-    void audioEngine?.startAir(dir === 'down' ? 'dump' : 'fill');
 
     holdTimerRef.current = window.setInterval(() => {
       applyStep();
@@ -266,6 +283,9 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
   const applyPreset = (num: 1 | 2) => {
     stopAxleHold();
     clearPresetAnim();
+    if (num === 1 && compressorOn) {
+      setCompressorOn(false);
+    }
     onHaptic([12, 24, 12]);
     setActivePreset(num);
 
@@ -285,7 +305,7 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
       return;
     }
 
-    void audioEngine?.playPresetTransition(dir, 720);
+    void audioEngine?.playPresetTransition(dir, 650);
 
     presetTimerRef.current = window.setInterval(() => {
       let done = true;
@@ -319,7 +339,7 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
 
   return (
     <div className="panel-surface p-3.5 sm:p-4 space-y-3">
-      {/* Header matching video layout in Alpan style */}
+      {/* Clean Header matching reference video */}
       <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-white/10">
         <div className="flex items-center gap-2 min-w-0">
           <Gauge className="w-4 h-4 text-[var(--acc)] shrink-0" aria-hidden="true" />
@@ -327,11 +347,9 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
             ПНЕВМОПОДВЕСКА
           </span>
         </div>
-        <div className="flex items-center gap-2.5 text-[11px] font-bold text-[var(--dim)] shrink-0">
-          <span>4-КОНТУРНАЯ</span>
-          <span aria-hidden="true">·</span>
-          <span className="mono-nums text-white/85">{tankBar.toFixed(1)} BAR</span>
-        </div>
+        <span className="text-[11px] font-bold tracking-wider text-[var(--dim)] shrink-0">
+          4-КОНТУРНАЯ
+        </span>
       </div>
 
       {/* 4 Circular Corner Gauges */}
@@ -416,14 +434,14 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
         </div>
       </div>
 
-      {/* Presets & Compressor Row */}
+      {/* Presets & Compressor Row (Solid gold presets matching video in Alpan style) */}
       <div className="grid grid-cols-3 gap-2">
         <button
           type="button"
           onClick={() => applyPreset(1)}
           aria-pressed={activePreset === 1}
           className={`siren-btn py-2.5 px-2 text-xs font-extrabold tracking-wide whitespace-nowrap ${
-            activePreset === 1 ? 'active' : ''
+            activePreset === 1 ? 'gold-solid' : 'active'
           }`}
         >
           ПРЕСЕТ 1
@@ -433,7 +451,7 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
           onClick={() => applyPreset(2)}
           aria-pressed={activePreset === 2}
           className={`siren-btn py-2.5 px-2 text-xs font-extrabold tracking-wide whitespace-nowrap ${
-            activePreset === 2 ? 'active' : ''
+            activePreset === 2 ? 'gold-solid' : 'active'
           }`}
         >
           ПРЕСЕТ 2
@@ -443,14 +461,13 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
           onClick={toggleCompressor}
           aria-pressed={compressorOn}
           className={`siren-btn py-2.5 px-2 text-xs font-extrabold tracking-wide whitespace-nowrap ${
-            compressorOn ? 'active' : ''
+            compressorOn ? 'gold-solid' : ''
           }`}
         >
           КОМПРЕССОР
         </button>
       </div>
 
-      {/* Live Compressor Status Line */}
       {compressorOn && (
         <p className="text-center text-xs font-extrabold tracking-widest text-[var(--acc)] pt-0.5">
           КОМПРЕССОР РАБОТАЕТ

@@ -1,6 +1,6 @@
 import type { SirenMode } from '../audio/sirenEngine';
 
-export type SguSystemId = 'hazard' | 'k13' | 'grach' | 'elina' | 'bars';
+export type SguSystemId = 'hazard' | 'k13';
 
 export interface SguSystemSpec {
   id: SguSystemId;
@@ -14,7 +14,6 @@ export interface SguSystemSpec {
   manLabel: string;
   hornLabel: string;
   pttLabel: string;
-  // Ordered bottom-to-top for rotary knob & arc labels (matches Hazard 7007 layout)
   modes: Array<{
     mode: SirenMode;
     label: string;
@@ -29,7 +28,7 @@ export const SGU_SYSTEMS: Record<SguSystemId, SguSystemSpec> = {
     brandTop: 'PREMIER',
     brandBottom: 'HAZARD',
     modelCode: '7007',
-    tagline: 'Классический чёрный корпус · жёлтая разметка · 2 крутилки · MAN / HORN',
+    tagline: 'Классический чёрный корпус · 2 крутилки · MAN / PULSAR / HORN',
     accentColor: '#eab308',
     manLabel: 'MAN',
     hornLabel: 'HORN',
@@ -50,81 +49,18 @@ export const SGU_SYSTEMS: Record<SguSystemId, SguSystemSpec> = {
     brandTop: 'ГИБДД',
     brandBottom: 'K-13',
     modelCode: 'K-13',
-    tagline: 'Как на видео · быстрый SHORT · чёткий PULSAR · MANUAL · HORN',
+    tagline: '6 кнопок как на видео · SHORT · HORN · PULSAR · SIREN · MANUAL · MODE',
     accentColor: '#f59e0b',
     manLabel: 'MANUAL',
     hornLabel: 'HORN',
     pttLabel: 'ГГС',
     modes: [
       { mode: 'standby', label: 'ВЫКЛ' },
-      { mode: 'phaser', label: 'PULSAR' },
-      { mode: 'yelp', label: 'YELP' },
       { mode: 'wail', label: 'WAIL' },
+      { mode: 'yelp', label: 'YELP' },
       { mode: 'hilo', label: 'HILO' },
+      { mode: 'phaser', label: 'PULSAR' },
       { mode: 'pa', label: 'PA' },
-    ],
-  },
-  grach: {
-    id: 'grach',
-    name: 'СГУ «ГРАЧ» (Элект-200)',
-    shortName: 'СГУ ГРАЧ',
-    brandTop: 'ЭЛЕКТ',
-    brandBottom: 'ГРАЧ',
-    modelCode: 'СГУ-200',
-    tagline: 'Пульт ДПС «Грач» · красная шкала · жёсткий тифон · крякалка',
-    accentColor: '#ef4444',
-    manLabel: 'СМЕНА',
-    hornLabel: 'КРЯК',
-    pttLabel: 'ПЭУ',
-    modes: [
-      { mode: 'standby', label: 'ОЖИД.' },
-      { mode: 'grach', label: 'ГРАЧ-1' },
-      { mode: 'smerch', label: 'СМЕРЧ' },
-      { mode: 'wail', label: 'ВОЙ' },
-      { mode: 'pa', label: 'ГГС' },
-      { mode: 'radio', label: 'РАДИО' },
-    ],
-  },
-  elina: {
-    id: 'elina',
-    name: 'СГУ «ЭЛИНА» (Смерч-200П)',
-    shortName: 'СГУ ЭЛИНА',
-    brandTop: 'ЭЛИНА',
-    brandBottom: 'СМЕРЧ',
-    modelCode: '200П',
-    tagline: 'Синяя индикация · резкий спецсигнал Элина · мгновенный кряк',
-    accentColor: '#38bdf8',
-    manLabel: 'РУЧН.',
-    hornLabel: 'КРЯК',
-    pttLabel: 'МИКР.',
-    modes: [
-      { mode: 'standby', label: 'ПАУЗА' },
-      { mode: 'elina', label: 'ЭЛИНА' },
-      { mode: 'yelp', label: 'ЧАСТ.' },
-      { mode: 'phaser', label: 'ТРЕЛЬ' },
-      { mode: 'pa', label: 'ЭФИР' },
-      { mode: 'radio', label: 'РАДИО' },
-    ],
-  },
-  bars: {
-    id: 'bars',
-    name: 'СГУ «БАРС» (Патриот-200)',
-    shortName: 'СГУ БАРС',
-    brandTop: 'СПЕЦ',
-    brandBottom: 'БАРС',
-    modelCode: 'П-200',
-    tagline: 'Усиленный низкий тон Барс · Патриот · двухтональный Тритон',
-    accentColor: '#f97316',
-    manLabel: 'ТОН',
-    hornLabel: 'ТИФОН',
-    pttLabel: 'ТАНГ.',
-    modes: [
-      { mode: 'standby', label: 'СТОП' },
-      { mode: 'bars', label: 'БАРС' },
-      { mode: 'patriot', label: 'ПАТРИОТ' },
-      { mode: 'rumbler', label: 'ТРИТОН' },
-      { mode: 'pa', label: 'ГГС' },
-      { mode: 'radio', label: 'РАДИО' },
     ],
   },
 };
@@ -132,7 +68,4 @@ export const SGU_SYSTEMS: Record<SguSystemId, SguSystemSpec> = {
 export const SGU_LIST: SguSystemSpec[] = [
   SGU_SYSTEMS.hazard,
   SGU_SYSTEMS.k13,
-  SGU_SYSTEMS.grach,
-  SGU_SYSTEMS.elina,
-  SGU_SYSTEMS.bars,
 ];

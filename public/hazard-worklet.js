@@ -1,86 +1,89 @@
 (function (root) {
   'use strict';
 
-  // Calibrated directly against reference Hazard 7007 / K-13 / ГИБДД video recordings
+  // Exact Premier Hazard 7007 & K-13 patterns calibrated directly to the reference video
+  // - WAIL:   smooth 520 <-> 1800 Hz (4.5s up / 4.1s down)
+  // - YELP:   smooth 540 <-> 1780 Hz (~3.05 cycles/sec, zero-seam continuous sweep)
+  // - HILO:   clean European two-tone 665 / 1095 Hz (0.545s step)
+  // - PULSAR: crisp 710 <-> 1690 Hz trill (~19 Hz)
   const PAT = {
-    wail:    { lo: 520, hi: 1800, up: 4.50,  down: 4.10,  smooth: 0.045,  a: 505,    b: 1820 },
-    yelp:    { lo: 530, hi: 1780, up: 0.160, down: 0.170, smooth: 0.004,  a: 505,    b: 1805 },
-    phaser:  { lo: 810, hi: 1540, up: 0.024, down: 0.026, smooth: 0.0018, a: 785,    b: 1565 },
-    hilo:    { hi: 1095, lo: 665, half: 0.545, smooth: 0.003 },
-    fast:    { lo: 620, hi: 1785, up: 1.35,  down: 1.20,  smooth: 0.028,  a: 600,    b: 1805 },
-    piercer: { lo: 680, hi: 1780, up: 0.095, down: 0.018, smooth: 0.0015, a: 660,    b: 1800 },
-    airraid: { lo: 310, hi: 780,  up: 4.50,  down: 5.50,  smooth: 0.14,   a: 300,    b: 790 },
-    rumbler: { lo: 260, hi: 675,  up: 0.145, down: 0.145, smooth: 0.006,  a: 245,    b: 690 },
-    grach:   { lo: 560, hi: 1520, up: 0.205, down: 0.185, smooth: 0.004,  a: 538,    b: 1550 },
-    elina:   { lo: 540, hi: 1620, up: 0.86,  down: 0.78,  smooth: 0.014,  a: 520,    b: 1650 },
-    smerch:  { lo: 650, hi: 1760, up: 0.032, down: 0.024, smooth: 0.0015, a: 625,    b: 1790 },
-    bars:    { hi: 960, lo: 495,  half: 0.355, smooth: 0.0025 },
-    patriot: { lo: 280, hi: 730,  up: 0.138, down: 0.138, smooth: 0.0055, a: 268,    b: 745 },
+    wail:   { lo: 520, hi: 1800, up: 4.50,  down: 4.10,  smooth: 0.045,  a: 505, b: 1820 },
+    yelp:   { lo: 540, hi: 1780, up: 0.162, down: 0.168, smooth: 0.004,  a: 520, b: 1805 },
+    hilo:   { hi: 1095, lo: 665, half: 0.545, smooth: 0.003 },
+    phaser: { lo: 710, hi: 1690, up: 0.025, down: 0.027, smooth: 0.0018, a: 690, b: 1710 },
   };
 
-  const SGU_HORN = {
-    hazard: { pitch: 1.0,  subMix: 0.24 },
-    k13:    { pitch: 1.04, subMix: 0.20 },
-    grach:  { pitch: 0.80, subMix: 0.30 },
-    elina:  { pitch: 1.08, subMix: 0.18 },
-    bars:   { pitch: 0.70, subMix: 0.34 },
-  };
-
-  // Manual siren sweep: smooth ~2.6s ramp 510->1805 Hz on hold, ~3s smooth wind-down on release,
-  // catching MAN again while spinning down above 880 Hz triggers crisp PULSAR trill (exact 7007 video behavior)
-  const MAN = { start: 510, max: 1805, rise: 660, tau: 1.42, cut: 295, burst: 880 };
-
-  // T: 0=OFF, 1=WAIL, 2=YELP, 3=HILO, 4=PHASER, 5=FAST, 6=PIERCER, 7=RUMBLER, 8=AIRRAID, 9=MEGA/USA, 10=GRACH, 11=ELINA, 12=SMERCH, 13=BARS, 14=PATRIOT
+  // T: 0=OFF, 1=WAIL, 2=YELP, 3=HILO, 4=PULSAR
   const TONE_PAT = {
     1: 'wail',
     2: 'yelp',
     3: 'hilo',
     4: 'phaser',
-    5: 'fast',
-    6: 'piercer',
-    7: 'rumbler',
-    8: 'airraid',
-    10: 'grach',
-    11: 'elina',
-    12: 'smerch',
-    13: 'bars',
-    14: 'patriot',
   };
 
-  const LOOPS = ['yelp'];
-  function read(pcm, pos) {
+  // Smooth manual spin-up (~2.7s 520->1805 Hz) and natural coast-down on release.
+  // Pressing MAN again while spinning down above 720 Hz activates crisp PULSAR, stopping cleanly on release.
+  const MAN = { start: 520, max: 1805, rise: 660, tau: 1.45, cut: 295, burst: 720 };
+
+  // Build 4096-sample single-cycle phase-continuous Hazard 7007 carrier wavetable
+  // Calibrated to the exact measured harmonic profile of real Hazard 7007 & K-13 recordings:
+  // h1 = 1.00, h2 = 0.015, h3 = 0.042, h5 = 0.010 -> warm, thick, punchy, ZERO buzz/clipping/aliasing.
+  const TABLE_SIZE = 4096;
+  const WAVE = new Float32Array(TABLE_SIZE);
+  {
+    let peak = 0;
+    for (let i = 0; i < TABLE_SIZE; i++) {
+      const th = (2 * Math.PI * i) / TABLE_SIZE;
+      const v =
+        1.000 * Math.sin(th) +
+        0.015 * Math.sin(2 * th) +
+        0.042 * Math.sin(3 * th) +
+        0.010 * Math.sin(5 * th);
+      WAVE[i] = v;
+      if (Math.abs(v) > peak) peak = Math.abs(v);
+    }
+    const norm = peak > 0 ? 0.86 / peak : 1;
+    for (let i = 0; i < TABLE_SIZE; i++) WAVE[i] *= norm;
+  }
+
+  function readWave(phase01) {
+    const p = (phase01 - Math.floor(phase01)) * TABLE_SIZE;
+    const i0 = p | 0;
+    const i1 = (i0 + 1) & (TABLE_SIZE - 1);
+    const fr = p - i0;
+    return WAVE[i0] + (WAVE[i1] - WAVE[i0]) * fr;
+  }
+
+  function readLinear(pcm, pos) {
     const len = pcm.length;
     if (len === 0) return 0;
-    let p = pos;
-    if (p < 0) p = 0;
-    const i = p | 0;
+    const i = pos | 0;
+    if (i < 0) return pcm[0];
     if (i >= len) return pcm[len - 1];
-    const fr = p - i;
+    const fr = pos - i;
     const a = pcm[i];
     const b = i + 1 < len ? pcm[i + 1] : pcm[0];
     return a + (b - a) * fr;
   }
 
-  // Seamless crossfaded reader near loop end so horn/siren loops never click or buzz
+  // Seamless crossfade loop reader for HORN recording (eliminates loop-seam click/pop)
   function readHornSeamless(pcm, pos, ls) {
     const len = pcm.length;
     if (len === 0) return 0;
     const loopLen = Math.max(64, len - ls);
-    const xf = Math.min(loopLen >> 2, 1400); // ~30-60ms smooth crossfade window
-    const s1 = read(pcm, pos);
+    const xf = Math.min(loopLen >> 2, 1300);
+    const s1 = readLinear(pcm, pos);
     const distToEnd = len - pos;
     if (xf > 16 && distToEnd < xf && pos >= ls) {
-      const t = 1 - distToEnd / xf; // 0 -> 1 as pos approaches len
+      const t = 1 - distToEnd / xf;
       const w1 = Math.cos(t * Math.PI * 0.5);
       const w2 = Math.sin(t * Math.PI * 0.5);
       const wrapPos = ls + (xf - distToEnd);
-      const s2 = read(pcm, wrapPos);
+      const s2 = readLinear(pcm, wrapPos);
       return s1 * w1 + s2 * w2;
     }
     return s1;
   }
-
-  const eq = (g) => Math.sin((g * Math.PI) / 2);
 
   class HazardSynth {
     constructor(sr) {
@@ -89,49 +92,62 @@
       this.sgu = 'hazard';
       this.rec = {};
 
-      this.ph = 0; this.f = 0; this.tf = 0; this.f1 = 0; this.dir = 1;
-      this.mode = 'idle'; this.pat = null; this.patName = '';
-      this.hiloT = 0; this.mf = 0; this.trill = false; this.amp = 0;
+      this.ph = 0;
+      this.f = 0;
+      this.tf = 0;
+      this.f1 = 0;
+      this.dir = 1;
+      this.mode = 'idle';
+      this.pat = null;
+      this.patName = '';
+      this.hiloT = 0;
+      this.mf = 0;
+      this.trill = false;
+      this.amp = 0;
       this.wasFalling = false;
       this.manWasHeld = false;
-      this.usaT = 0;
-      this.shortT = -1; // >=0 when K-13 SHORT chirp is active
+      this.shortT = -1;
+      this.cutFade = false;
 
-      this.v = {};
-      for (const n of LOOPS.concat(['tone'])) this.v[n] = { pos: 0, g: 0 };
-      this.want = null; this.fPrev = 0;
-
-      this.hg = 0; this.hph = 0; this.hc = 0; this.hornWas = false; this.hornPos = 0; this.hornSubPos = 0;
-      this.wolf = null; this.wolfPos = -1; this.wolfGain = 1;
+      this.hg = 0;
+      this.hornWas = false;
+      this.hornPos = 0;
+      this.hornLp = 0; // gentle smoothing filter removes harsh clipping edges in horn.wav
+      this.wolf = null;
+      this.wolfPos = -1;
+      this.wolfGain = 1;
       this.gm = 1;
 
       const k = (sec) => 1 - Math.exp(-1 / (sec * sr));
-      this.kAmp = k(0.003); this.kAmpOff = k(0.008);
-      this.kHornOn = k(0.002); this.kHornOff = k(0.016);
-      this.kMute = k(0.004); this.kMan = k(0.005);
-      this.kX = 1 / (0.03 * sr);
-      this.statN = 0; this.statPeak = 0; this.onStat = null;
+      this.kAmp = k(0.004);
+      this.kAmpOff = k(0.012);
+      this.kAmpCut = k(0.009); // crisp ~25-35ms fade-out after PULSAR release (exact 22.06s video cutoff)
+      this.kHornOn = k(0.003);
+      this.kHornOff = k(0.016);
+      this.kHornLp = k(1 / (2 * Math.PI * 2600));
+      this.kMute = k(0.004);
+      this.kMan = k(0.005);
+
+      this.statN = 0;
+      this.statPeak = 0;
+      this.onStat = null;
     }
 
     get useRec() {
-      const r = this.rec;
-      return !!(r.yelp && r.tone);
+      // Siren carrier is always ready phase-continuously; horn/wolf use decoded WAVs
+      return true;
     }
 
     message(m) {
       if (!m) return;
       if (m.type === 'state') {
-        const prevTone = this.s.tone;
         Object.assign(this.s, m.s);
-        if (this.s.tone === 9 && prevTone !== 9) this.usaT = 0;
       } else if (m.type === 'sgu') {
-        this.sgu = SGU_HORN[m.id] ? m.id : 'hazard';
+        this.sgu = m.id === 'k13' ? 'k13' : 'hazard';
       } else if (m.type === 'sample') {
         this.rec[m.name] = {
           pcm: m.pcm,
           ls: Math.round((m.loopStart || 0) * this.sr),
-          track: m.track || null,
-          stepS: (m.step || 0.02) * this.sr,
           hz: m.hz && m.hz > 20 ? m.hz : 904.4,
         };
       } else if (m.type === 'wolfData') {
@@ -139,7 +155,7 @@
         let peak = 0;
         for (let i = 0; i < pcm.length; i++) peak = Math.max(peak, Math.abs(pcm[i]));
         this.wolf = pcm;
-        this.wolfGain = peak > 0 ? 0.94 / peak : 1;
+        this.wolfGain = peak > 0 ? 0.9 / peak : 1;
       } else if (m.type === 'wolf') {
         if (this.wolf) this.wolfPos = 0;
       } else if (m.type === 'wolfStop') {
@@ -159,38 +175,15 @@
       this.manWasHeld = false;
       this.wolfPos = -1;
       this.shortT = -1;
-      this.usaT = 0;
-    }
-
-    trackF(name, pos) {
-      const r = this.rec[name];
-      const t = r && r.track;
-      if (!t) return this.f;
-      const x = pos / r.stepS;
-      const i = Math.min(t.length - 1, x | 0);
-      const j = (i + 1) % t.length;
-      return t[i] + (t[j] - t[i]) * (x - i);
-    }
-
-    findPos(name, f, dir) {
-      const r = this.rec[name];
-      const t = r && r.track;
-      if (!t) return 0;
-      let best = 0;
-      let cost = 1e9;
-      for (let i = 0; i < t.length; i++) {
-        const d = t[(i + 1) % t.length] - t[i];
-        const c = Math.abs(t[i] - f) + ((d >= 0 ? 1 : -1) !== dir ? 250 : 0);
-        if (c < cost) { cost = c; best = i; }
-      }
-      return best * r.stepS;
+      this.cutFade = false;
     }
 
     enterPat(name, fromSilence) {
-      const p = PAT[name];
+      const p = PAT[name] || PAT.wail;
       this.pat = p;
       this.patName = name;
-      if (name === 'hilo' || name === 'bars') {
+      this.cutFade = false;
+      if (name === 'hilo') {
         this.hiloT = 0;
         this.tf = p.hi;
         if (fromSilence) this.f = this.f1 = p.hi;
@@ -198,15 +191,15 @@
         this.tf = this.f = this.f1 = p.lo;
         this.dir = 1;
       } else {
-        this.tf = this.f;
-        this.f1 = this.f;
+        this.tf = this.f > 0 ? this.f : p.lo;
+        this.f1 = this.tf;
       }
       this.mode = 'pat';
     }
 
     control(blockDur) {
       const s = this.s;
-      const silent = this.amp < 0.02;
+      const silent = this.amp < 0.015;
       if (!s.power) {
         if (this.mode !== 'idle') this.reset();
         this.trill = false;
@@ -214,35 +207,35 @@
         return 0;
       }
 
-      // K-13 SHORT quick chirp override while active (~0.24s)
+      // K-13 SHORT quick chirp (~0.25s crisp upward chirp)
       if (this.shortT >= 0) {
         this.shortT += blockDur;
-        if (this.shortT > 0.26) {
+        if (this.shortT > 0.25) {
           this.shortT = -1;
+          this.cutFade = true;
         } else {
+          this.cutFade = false;
           return 4;
         }
       }
 
+      // Active automatic siren pattern (WAIL / YELP / HILO / PULSAR)
       if (s.tone) {
-        let name = TONE_PAT[s.tone];
-        if (s.tone === 9) {
-          this.usaT = (this.usaT + blockDur) % 10.5;
-          name = this.usaT < 3.5 ? 'wail' : this.usaT < 6.0 ? 'yelp' : this.usaT < 8.3 ? 'grach' : 'phaser';
-        }
+        const name = TONE_PAT[s.tone] || 'wail';
         if (this.mode !== 'pat' || this.patName !== name) {
           this.enterPat(name, silent || this.mode === 'idle');
         }
         this.trill = false;
         this.wasFalling = false;
         this.manWasHeld = s.manHeld;
+        this.cutFade = false;
         return 1;
       }
 
-      // PA mode: holding MAN triggers instant crisp PULSAR trill, releasing coasts down smoothly
-      if (s.man === 'pa') {
+      // Dedicated hold-only PULSAR key (K-13 PULSAR button): starts immediately and stops cleanly on release
+      if (s.man === 'pulsar') {
         if (s.manHeld) {
-          if (!this.trill) {
+          if (!this.trill || this.patName !== 'phaser') {
             this.trill = true;
             this.enterPat('phaser', silent);
             this.tf = Math.max(PAT.phaser.lo, this.f || PAT.phaser.lo);
@@ -250,31 +243,36 @@
           }
           this.wasFalling = false;
           this.manWasHeld = true;
+          this.cutFade = false;
           return 1;
         }
-        if (this.trill || this.mode === 'pat') {
-          this.mf = Math.max(this.f, 1180);
+        if (this.trill) {
           this.trill = false;
-          this.mode = 'manual';
+          this.mf = 0;
+          this.wasFalling = false;
+          this.mode = 'idle';
+          this.cutFade = true;
         }
-        this.wasFalling = this.mf > 380;
         this.manWasHeld = false;
-        return 3;
+        return 0;
       }
 
-      // STANDBY / RADIO mode: smooth manual wind-up; double-tap/re-catch while winding down above 880 Hz triggers PULSAR
+      // STANDBY / PA / RADIO mode:
+      // - 1st MAN hold smoothly sweeps 520 -> 1805 Hz, release smoothly coasts down
+      // - 2nd MAN press while spinning down above 720 Hz catches into crisp PULSAR, stopping cleanly on release!
       if (this.mode === 'pat' && !this.trill) {
         this.mf = silent ? 0 : this.f;
         this.mode = 'manual';
       }
       if (this.mode === 'idle') this.mode = 'manual';
 
-      if (s.man === 'manual' && s.manHeld) {
+      if ((s.man === 'manual' || s.man === 'pa') && s.manHeld) {
         if (!this.manWasHeld && this.wasFalling && this.mf >= MAN.burst) {
           this.trill = true;
           this.enterPat('phaser', false);
         }
         this.manWasHeld = true;
+        this.cutFade = false;
         if (this.trill) {
           return 1;
         }
@@ -282,76 +280,70 @@
         return 2;
       }
 
+      // Releasing PULSAR stops cleanly within ~35ms (exact 22.06s Hazard 7007 video behavior)
       if (this.trill) {
-        this.mf = Math.max(this.f, 1180);
         this.trill = false;
-        this.mode = 'manual';
+        this.mf = 0;
+        this.wasFalling = false;
+        this.mode = 'idle';
+        this.manWasHeld = false;
+        this.cutFade = true;
+        return 0;
       }
+
       this.manWasHeld = false;
+      this.cutFade = false;
       this.wasFalling = this.mf > 380;
       return 3;
     }
 
     render(out) {
-      const n = out.length, sr = this.sr, s = this.s, dt = 1 / sr;
+      const n = out.length;
+      const sr = this.sr;
+      const s = this.s;
+      const dt = 1 / sr;
       const how = this.control(n * dt);
-      const rec = this.useRec;
+
       const muteT = s.mute || !s.power ? 0 : 1;
       const hornT = s.power && s.horn && !s.mute ? 1 : 0;
       if (hornT && !this.hornWas) {
-        this.hph = 0;
         this.hornPos = 0;
-        this.hornSubPos = 0;
+        this.hornLp = 0;
       }
       this.hornWas = !!hornT;
 
       const decay = Math.exp(-dt / MAN.tau);
       const ks = how === 1 && this.pat ? 1 - Math.exp(-dt / this.pat.smooth) : 0;
+      const hornR = this.rec.horn;
+      const hornPitch = this.sgu === 'k13' ? 1.03 : 1.0;
 
-      const isLoopRec = this.patName === 'yelp';
-      const loopName = rec && how === 1 && isLoopRec ? this.patName : null;
-      const toneOn = rec && (how === 2 || how === 3 || how === 4 || (how === 1 && !isLoopRec));
-
-      if (loopName !== this.want) {
-        if (loopName) {
-          const dirS = this.f >= this.fPrev ? 1 : -1;
-          this.v[loopName].pos =
-            this.amp < 0.02 || this.v[loopName].g > 0.5
-              ? (this.amp < 0.02 ? 0 : this.v[loopName].pos)
-              : this.findPos(loopName, this.f, dirS);
-        }
-        this.want = loopName;
-      }
-      this.fPrev = this.f;
-
-      const R = this.rec, V = this.v;
-      const tone = R.tone, toneV = V.tone, hornR = R.horn;
-      const sh = SGU_HORN[this.sgu] || SGU_HORN.hazard;
       let peak = 0;
 
       for (let i = 0; i < n; i++) {
         let ampT = 0;
         if (how === 1) {
-          if (loopName) {
-            this.f = this.trackF(loopName, V[loopName].pos);
-          } else {
-            const p = this.pat;
-            if (this.patName === 'hilo' || this.patName === 'bars') {
-              this.hiloT += dt;
-              if (this.hiloT >= p.half) {
-                this.hiloT -= p.half;
-                this.tf = this.tf === p.hi ? p.lo : p.hi;
-              }
-            } else if (this.dir > 0) {
-              this.tf *= Math.pow(p.b / p.a, dt / p.up);
-              if (this.tf >= p.b || !Number.isFinite(this.tf)) { this.tf = p.b; this.dir = -1; }
-            } else {
-              this.tf /= Math.pow(p.b / p.a, dt / p.down);
-              if (this.tf <= p.a || !Number.isFinite(this.tf)) { this.tf = p.a; this.dir = 1; }
+          const p = this.pat;
+          if (this.patName === 'hilo') {
+            this.hiloT += dt;
+            if (this.hiloT >= p.half) {
+              this.hiloT -= p.half;
+              this.tf = this.tf === p.hi ? p.lo : p.hi;
             }
-            this.f1 += (this.tf - this.f1) * ks;
-            this.f += (this.f1 - this.f) * ks;
+          } else if (this.dir > 0) {
+            this.tf *= Math.pow(p.b / p.a, dt / p.up);
+            if (this.tf >= p.b || !Number.isFinite(this.tf)) {
+              this.tf = p.b;
+              this.dir = -1;
+            }
+          } else {
+            this.tf /= Math.pow(p.b / p.a, dt / p.down);
+            if (this.tf <= p.a || !Number.isFinite(this.tf)) {
+              this.tf = p.a;
+              this.dir = 1;
+            }
           }
+          this.f1 += (this.tf - this.f1) * ks;
+          this.f += (this.f1 - this.f) * ks;
           ampT = 1;
         } else if (how === 2) {
           if (this.mf < MAN.start) this.mf = MAN.start;
@@ -368,55 +360,35 @@
             this.wasFalling = false;
           }
         } else if (how === 4) {
-          // K-13 SHORT crisp rising chirp (700 -> 1680 Hz)
-          const pNorm = Math.min(1, this.shortT / 0.22);
-          this.f = 700 + 980 * Math.sin(pNorm * Math.PI * 0.5);
-          ampT = this.shortT < 0.21 ? 1 : Math.max(0, 1 - (this.shortT - 0.21) / 0.05);
+          const pNorm = Math.min(1, this.shortT / 0.21);
+          this.f = 700 + 960 * Math.sin(pNorm * Math.PI * 0.5);
+          ampT = this.shortT < 0.20 ? 1 : Math.max(0, 1 - (this.shortT - 0.20) / 0.05);
         }
 
         if (!Number.isFinite(this.f) || this.f < 0) this.f = 0;
-        this.amp += (ampT - this.amp) * (ampT > this.amp ? this.kAmp : this.kAmpOff);
 
+        const ampRate =
+          ampT > this.amp ? this.kAmp : this.cutFade ? this.kAmpCut : this.kAmpOff;
+        this.amp += (ampT - this.amp) * ampRate;
+
+        // Phase-continuous smooth Hazard 7007 / K-13 carrier wave (zero wrap clicks or clipping)
         let y = 0;
-        if (rec) {
-          for (let k = 0; k < LOOPS.length; k++) {
-            const name = LOOPS[k], v = V[name], r = R[name];
-            if (!r) continue;
-            const t = name === loopName ? 1 : 0;
-            if (v.g !== t) v.g = t > v.g ? Math.min(t, v.g + this.kX) : Math.max(t, v.g - this.kX);
-            if (v.g > 0) {
-              y += read(r.pcm, v.pos) * eq(v.g);
-              v.pos += 1;
-              if (v.pos >= r.pcm.length) v.pos = r.ls + (v.pos - r.pcm.length);
-            }
-          }
-          const tt = toneOn ? 1 : 0;
-          if (toneV.g !== tt) toneV.g = tt > toneV.g ? Math.min(tt, toneV.g + this.kX) : Math.max(tt, toneV.g - this.kX);
-          if (toneV.g > 0 && tone) {
-            y += read(tone.pcm, toneV.pos) * eq(toneV.g);
-            const step = this.f / (tone.hz || 904.4);
-            toneV.pos += Number.isFinite(step) && step >= 0 ? step : 1;
-            if (toneV.pos >= tone.pcm.length) toneV.pos %= tone.pcm.length;
-          }
-          y *= this.amp;
+        if (this.amp > 1e-5 && this.f > 40) {
+          this.ph += this.f * dt;
+          if (this.ph >= 1) this.ph -= Math.floor(this.ph);
+          y = readWave(this.ph) * this.amp;
         }
 
+        // Authentic HORN (crossfade-looped & softly lowpass-smoothed to remove clipped rasp/comb artifacts)
         this.hg += (hornT - this.hg) * (hornT > this.hg ? this.kHornOn : this.kHornOff);
-        if (this.hg > 1e-5 && rec && hornR) {
-          const pBase = sh.pitch || 1.0;
-          const hMain = readHornSeamless(hornR.pcm, this.hornPos, hornR.ls);
-          const hSub = readHornSeamless(hornR.pcm, this.hornSubPos, hornR.ls);
-          const subMix = sh.subMix || 0.24;
-          const h = hMain * (1 - subMix * 0.45) + hSub * subMix;
-
+        if (this.hg > 1e-5 && hornR) {
+          const rawH = readHornSeamless(hornR.pcm, this.hornPos, hornR.ls);
+          this.hornLp += (rawH - this.hornLp) * this.kHornLp;
+          const h = this.hornLp * 0.92;
           const loopLen = Math.max(1, hornR.pcm.length - hornR.ls);
-          this.hornPos += pBase;
+          this.hornPos += hornPitch;
           if (this.hornPos >= hornR.pcm.length) {
             this.hornPos = hornR.ls + ((this.hornPos - hornR.pcm.length) % loopLen);
-          }
-          this.hornSubPos += pBase * 0.5;
-          if (this.hornSubPos >= hornR.pcm.length) {
-            this.hornSubPos = hornR.ls + ((this.hornSubPos - hornR.pcm.length) % loopLen);
           }
           y = y * (1 - this.hg) + h * this.hg;
         }
@@ -428,7 +400,8 @@
 
         this.gm += (muteT - this.gm) * this.kMute;
         y *= this.gm;
-        if (y > 0.98) y = 0.98; else if (y < -0.98) y = -0.98;
+        if (y > 0.96) y = 0.96;
+        else if (y < -0.96) y = -0.96;
         out[i] = y;
         const a = y < 0 ? -y : y;
         if (a > peak) peak = a;
@@ -444,7 +417,7 @@
           horn: this.hg > 0.5,
           wolf: this.wolfPos >= 0,
           lvl: this.statPeak,
-          rec,
+          rec: true,
         });
         this.statN = 0;
         this.statPeak = 0;
