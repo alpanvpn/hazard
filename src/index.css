@@ -37,9 +37,11 @@
   --radius-card: 22px;
 }
 
-/* SGU Hardware Accent Overrides (Only Hazard 7007 & K-13) */
+/* SGU Hardware Accent Overrides */
 [data-sgu="hazard"] { --sgu-line: #e9be18; --sgu-label: #f4cc2a; }
 [data-sgu="k13"]    { --sgu-line: #f59e0b; --sgu-label: #fbbf24; }
+[data-sgu="elina"]  { --sgu-line: #38bdf8; --sgu-label: #7dd3fc; }
+[data-sgu="grach"]  { --sgu-line: #f87171; --sgu-label: #fca5a5; }
 
 * {
   box-sizing: border-box;

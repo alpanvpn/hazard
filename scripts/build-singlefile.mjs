@@ -23,7 +23,24 @@ const metaJson = JSON.parse(fs.readFileSync(path.join(soundsDir, 'meta.json'), '
 const svgIcon = fs.readFileSync(path.join(publicDir, 'icon.svg'), 'utf8');
 const svgIconUri = `data:image/svg+xml;base64,${Buffer.from(svgIcon, 'utf8').toString('base64')}`;
 
-const wavNames = ['wail', 'yelp', 'phaser', 'horn', 'tone', 'wolf'];
+const wavNames = [
+  'wail',
+  'yelp',
+  'phaser',
+  'horn',
+  'tone',
+  'wolf',
+  'elina/wail',
+  'elina/yelp',
+  'elina/hilo',
+  'elina/horn',
+  'elina/manual',
+  'grach/wail',
+  'grach/yelp',
+  'grach/phaser',
+  'grach/horn',
+  'grach/manual',
+];
 const wavBase64 = {};
 for (const name of wavNames) {
   const wavBuf = fs.readFileSync(path.join(soundsDir, `${name}.wav`));

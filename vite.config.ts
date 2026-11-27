@@ -23,6 +23,8 @@ export default defineConfig(() => {
           'hazard-worklet.js',
           'sounds/meta.json',
           'sounds/*.wav',
+          'sounds/elina/*.wav',
+          'sounds/grach/*.wav',
           'sounds/phrases/*.mp3',
         ],
         manifest: {

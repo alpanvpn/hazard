@@ -262,7 +262,7 @@ export default function App() {
     hornActive: false,
     wolfActive: false,
     loadedCount: 0,
-    totalCount: 6,
+    totalCount: 16,
     audioState: 'uninitialized',
     sessionType: 'playback',
     micOn: false,
@@ -784,7 +784,13 @@ export default function App() {
     [engineSnap.activePhrase]
   );
 
-  const altTargetMode = ALT_MODE_MAP[engineSnap.mode];
+  const altTargetMode = useMemo(() => {
+    const raw = ALT_MODE_MAP[engineSnap.mode];
+    if (!raw) return undefined;
+    if (sguSystem === 'elina' && raw === 'phaser') return 'hilo';
+    if (sguSystem === 'grach' && raw === 'hilo') return 'phaser';
+    return raw;
+  }, [engineSnap.mode, sguSystem]);
   const displayStatus = useMemo(() => {
     if (!engineSnap.powered) {
       return { title: 'ВЫКЛЮЧЕНО', subtitle: sguSpec.shortName };
@@ -1405,7 +1411,7 @@ export default function App() {
 
           {/* Right Column on Desktop / Tab Content on Mobile */}
           <div className="space-y-3">
-            {/* СГУ System Selector Section (Only Premier Hazard 7007 & K-13) */}
+            {/* СГУ System Selector Section (Hazard 7007, K-13, Элина Смерч, Грач) */}
             <section
               aria-label="Выбор системы СГУ"
               className={activeTab === 'modes' ? 'block' : 'hidden lg:block'}
@@ -2157,7 +2163,7 @@ export default function App() {
                   {lockTargetSection ? `Как открыть раздел «${lockTargetSection}»` : 'Открыть доступ к СГУ, Свет и FX'}
                 </h2>
                 <p className="text-xs text-[var(--acc)] font-semibold mt-0.5">
-                  Открывает сразу: пульт СГУ «K-13» (ГИБДД), мигалки и эффекты звука
+                  Открывает сразу: пульты СГУ «K-13», «Элина Смерч» и «Грач», свет и эффекты FX
                 </p>
               </div>
               <button

@@ -116,7 +116,7 @@ export class SirenAudioEngine {
   private startPromise: Promise<void> | null = null;
   private ready = false;
   private loadedCount = 0;
-  private readonly totalCount = 6;
+  private readonly totalCount = 16;
 
   private powered = false;
   private mode: SirenMode = 'standby';
@@ -136,7 +136,7 @@ export class SirenAudioEngine {
   private toneFreq = 4600;
   private micDb = 18;
   private sessionType: 'ambient' | 'playback' = 'playback';
-  private sguSystem: 'hazard' | 'k13' = 'hazard';
+  private sguSystem: 'hazard' | 'k13' | 'elina' | 'grach' = 'hazard';
 
   private currentHz = 0;
   private currentHorn = false;
@@ -155,6 +155,13 @@ export class SirenAudioEngine {
     track?: number[];
     step?: number;
     hz?: number;
+  }> = [];
+  private packSampleCache: Array<{
+    pack: 'elina' | 'grach';
+    name: string;
+    pcm: Float32Array;
+    loopStart: number;
+    loopEnd?: number;
   }> = [];
   private wolfCache: Float32Array | null = null;
   private workletStatSeen = false;
@@ -217,7 +224,24 @@ export class SirenAudioEngine {
     if (getInlineAssets()?.wavBase64) {
       return;
     }
-    const wavNames = ['wail', 'yelp', 'phaser', 'horn', 'tone', 'wolf'] as const;
+    const wavNames = [
+      'wail',
+      'yelp',
+      'phaser',
+      'horn',
+      'tone',
+      'wolf',
+      'elina/wail',
+      'elina/yelp',
+      'elina/hilo',
+      'elina/horn',
+      'elina/manual',
+      'grach/wail',
+      'grach/yelp',
+      'grach/phaser',
+      'grach/horn',
+      'grach/manual',
+    ] as const;
     const phraseUrls = [
       'sounds/phrases/obochina.mp3',
       'sounds/phrases/vpravo_stop.mp3',
@@ -440,6 +464,7 @@ export class SirenAudioEngine {
 
   private replayCachedSamples() {
     if (!this.sendFn) return;
+    this.sendFn({ type: 'sgu', id: this.sguSystem });
     for (const item of this.sampleCache) {
       const copy = new Float32Array(item.pcm);
       this.sendFn(
@@ -451,6 +476,20 @@ export class SirenAudioEngine {
           track: item.track,
           step: item.step,
           hz: item.hz,
+        },
+        [copy.buffer]
+      );
+    }
+    for (const item of this.packSampleCache) {
+      const copy = new Float32Array(item.pcm);
+      this.sendFn(
+        {
+          type: 'packSample',
+          pack: item.pack,
+          name: item.name,
+          pcm: copy,
+          loopStart: item.loopStart,
+          loopEnd: item.loopEnd,
         },
         [copy.buffer]
       );
@@ -613,7 +652,70 @@ export class SirenAudioEngine {
           // Ignore
         }
       };
-      void loadWolf();
+
+      const packSpecs: Array<{
+        pack: 'elina' | 'grach';
+        name: string;
+        loopStart: number;
+        loopEnd?: number;
+      }> = [
+        { pack: 'elina', name: 'wail', loopStart: 0 },
+        { pack: 'elina', name: 'yelp', loopStart: 0 },
+        { pack: 'elina', name: 'hilo', loopStart: 0 },
+        { pack: 'elina', name: 'horn', loopStart: 0.12, loopEnd: 0.58 },
+        { pack: 'elina', name: 'manual', loopStart: 4.85, loopEnd: 5.55 },
+        { pack: 'grach', name: 'wail', loopStart: 0 },
+        { pack: 'grach', name: 'yelp', loopStart: 0 },
+        { pack: 'grach', name: 'phaser', loopStart: 0 },
+        { pack: 'grach', name: 'horn', loopStart: 0.12, loopEnd: 1.05 },
+        { pack: 'grach', name: 'manual', loopStart: 0.70, loopEnd: 2.35 },
+      ];
+
+      const loadPacks = Promise.all(
+        packSpecs.map(async (spec) => {
+          const key = `${spec.pack}/${spec.name}`;
+          try {
+            let ab: ArrayBuffer | null = null;
+            if (inline?.wavBase64?.[key]) {
+              ab = base64ToArrayBuffer(inline.wavBase64[key]);
+            } else if (this.rawWavCache.has(key)) {
+              ab = this.rawWavCache.get(key)!;
+            } else {
+              const r = await fetch(`sounds/${key}.wav`);
+              if (r.ok) ab = await r.arrayBuffer();
+            }
+            if (!ab || !this.ctx) return;
+            const decoded = await this.ctx.decodeAudioData(ab.slice(0));
+            const raw = decoded.getChannelData(0);
+            const pcmCache = new Float32Array(raw);
+            const pcmTransfer = new Float32Array(raw);
+            this.packSampleCache.push({
+              pack: spec.pack,
+              name: spec.name,
+              pcm: pcmCache,
+              loopStart: spec.loopStart,
+              loopEnd: spec.loopEnd,
+            });
+            this.sendFn?.(
+              {
+                type: 'packSample',
+                pack: spec.pack,
+                name: spec.name,
+                pcm: pcmTransfer,
+                loopStart: spec.loopStart,
+                loopEnd: spec.loopEnd,
+              },
+              [pcmTransfer.buffer]
+            );
+            this.loadedCount++;
+            this.emit();
+          } catch {
+            // Individual pack sample fallback
+          }
+        })
+      );
+
+      void Promise.all([loadWolf(), loadPacks]);
     } catch {
       // Ignore load errors
     }
@@ -634,7 +736,7 @@ export class SirenAudioEngine {
     }
   }
 
-  public setSguSystem(id: 'hazard' | 'k13') {
+  public setSguSystem(id: 'hazard' | 'k13' | 'elina' | 'grach') {
     this.sguSystem = id;
     this.sendFn?.({ type: 'sgu', id });
   }

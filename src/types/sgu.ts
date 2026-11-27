@@ -1,6 +1,6 @@
 import type { SirenMode } from '../audio/sirenEngine';
 
-export type SguSystemId = 'hazard' | 'k13';
+export type SguSystemId = 'hazard' | 'k13' | 'elina' | 'grach';
 
 export interface SguSystemSpec {
   id: SguSystemId;
@@ -63,9 +63,53 @@ export const SGU_SYSTEMS: Record<SguSystemId, SguSystemSpec> = {
       { mode: 'pa', label: 'PA' },
     ],
   },
+  elina: {
+    id: 'elina',
+    name: 'СГУ «Элина Смерч»',
+    shortName: 'ЭЛИНА СМЕРЧ',
+    brandTop: 'ПК ЭЛИНА',
+    brandBottom: 'СМЕРЧ',
+    modelCode: '200ВТ',
+    tagline: 'Оригинальные заводские записи ПК «Элина» · WAIL / YELP / HILO / AIR HORN',
+    accentColor: '#38bdf8',
+    manLabel: 'MAN',
+    hornLabel: 'AIR HORN',
+    pttLabel: 'ГГС',
+    modes: [
+      { mode: 'standby', label: 'STANDBY' },
+      { mode: 'hilo', label: 'HILO' },
+      { mode: 'yelp', label: 'YELP' },
+      { mode: 'wail', label: 'WAIL' },
+      { mode: 'pa', label: 'PA' },
+      { mode: 'radio', label: 'RADIO' },
+    ],
+  },
+  grach: {
+    id: 'grach',
+    name: 'СГУ «Грач» (Элект)',
+    shortName: 'СГУ ГРАЧ',
+    brandTop: 'ЭЛЕКТ',
+    brandBottom: 'ГРАЧ',
+    modelCode: 'МД-200',
+    tagline: 'Реальные записи СГУ ДПС · низкий «кряк», WAIL, YELP и PULSAR',
+    accentColor: '#f87171',
+    manLabel: 'РУЧН',
+    hornLabel: 'КРЯК',
+    pttLabel: 'ГГС',
+    modes: [
+      { mode: 'standby', label: 'ВЫКЛ' },
+      { mode: 'phaser', label: 'PULSAR' },
+      { mode: 'yelp', label: 'YELP' },
+      { mode: 'wail', label: 'WAIL' },
+      { mode: 'pa', label: 'PA' },
+      { mode: 'radio', label: 'RADIO' },
+    ],
+  },
 };
 
 export const SGU_LIST: SguSystemSpec[] = [
   SGU_SYSTEMS.hazard,
   SGU_SYSTEMS.k13,
+  SGU_SYSTEMS.elina,
+  SGU_SYSTEMS.grach,
 ];

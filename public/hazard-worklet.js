@@ -91,6 +91,7 @@
       this.s = { power: false, tone: 0, man: 'off', manHeld: false, horn: false, mute: false };
       this.sgu = 'hazard';
       this.rec = {};
+      this.packRec = { elina: {}, grach: {} };
 
       this.ph = 0;
       this.f = 0;
@@ -108,6 +109,16 @@
       this.manWasHeld = false;
       this.shortT = -1;
       this.cutFade = false;
+
+      // Real multi-sample SGU playback state (elina / grach)
+      this.packPatName = '';
+      this.packPos = 0;
+      this.packManPos = 0;
+      this.packManWas = false;
+      this.packManAmp = 0;
+      this.packHzEst = 0;
+      this.packLastSign = 0;
+      this.packSinceZc = 0;
 
       this.hg = 0;
       this.hornWas = false;
@@ -134,7 +145,7 @@
     }
 
     get useRec() {
-      // Siren carrier is always ready phase-continuously; horn/wolf use decoded WAVs
+      // Siren carrier is always ready phase-continuously; horn/wolf/packs use decoded WAVs
       return true;
     }
 
@@ -143,12 +154,29 @@
       if (m.type === 'state') {
         Object.assign(this.s, m.s);
       } else if (m.type === 'sgu') {
-        this.sgu = m.id === 'k13' ? 'k13' : 'hazard';
+        const next = m.id === 'k13' || m.id === 'elina' || m.id === 'grach' ? m.id : 'hazard';
+        if (next !== this.sgu) {
+          this.sgu = next;
+          this.packPatName = '';
+          this.packPos = 0;
+          this.packManPos = 0;
+          this.packManWas = false;
+          this.packManAmp = 0;
+          this.hornWas = false;
+          this.hornPos = 0;
+        }
       } else if (m.type === 'sample') {
         this.rec[m.name] = {
           pcm: m.pcm,
           ls: Math.round((m.loopStart || 0) * this.sr),
           hz: m.hz && m.hz > 20 ? m.hz : 904.4,
+        };
+      } else if (m.type === 'packSample') {
+        if (!this.packRec[m.pack]) this.packRec[m.pack] = {};
+        this.packRec[m.pack][m.name] = {
+          pcm: m.pcm,
+          ls: Math.round((m.loopStart || 0) * this.sr),
+          le: m.loopEnd ? Math.round(m.loopEnd * this.sr) : m.pcm.length,
         };
       } else if (m.type === 'wolfData') {
         const pcm = m.pcm;
@@ -176,6 +204,11 @@
       this.wolfPos = -1;
       this.shortT = -1;
       this.cutFade = false;
+      this.packPatName = '';
+      this.packPos = 0;
+      this.packManPos = 0;
+      this.packManWas = false;
+      this.packManAmp = 0;
     }
 
     enterPat(name, fromSilence) {
@@ -297,7 +330,154 @@
       return 3;
     }
 
+    renderRealPack(out) {
+      const n = out.length;
+      const sr = this.sr;
+      const s = this.s;
+      const pack = this.packRec[this.sgu] || {};
+      const muteT = s.power && !s.mute ? 1 : 0;
+
+      // Resolve real recorded siren mode for this SGU pack (100% decoded WAVs, zero synthesis)
+      let wantPat = '';
+      if (s.power && s.tone) {
+        const rawPat = TONE_PAT[s.tone] || 'wail';
+        if (pack[rawPat]) {
+          wantPat = rawPat;
+        } else if (rawPat === 'phaser' && pack.hilo) {
+          wantPat = 'hilo';
+        } else if (rawPat === 'hilo' && pack.phaser) {
+          wantPat = 'phaser';
+        } else {
+          wantPat = pack.wail ? 'wail' : pack.yelp ? 'yelp' : '';
+        }
+      }
+
+      const activePatEntry = wantPat ? pack[wantPat] : null;
+      if (wantPat && wantPat !== this.packPatName) {
+        this.packPatName = wantPat;
+        this.packPos = 0;
+      } else if (!wantPat && this.amp < 0.004) {
+        this.packPatName = '';
+        this.packPos = 0;
+      }
+
+      // Real MANUAL recording when holding MAN in standby / pa / radio
+      const manT =
+        s.power && !s.tone && (s.man === 'manual' || s.man === 'pa') && s.manHeld && !s.mute ? 1 : 0;
+      if (manT && !this.packManWas) {
+        this.packManPos = 0;
+      }
+      this.packManWas = !!manT;
+      const manEntry = pack.manual || null;
+
+      // Real HORN recording for this SGU pack
+      const hornT = s.power && s.horn && !s.mute ? 1 : 0;
+      if (hornT && !this.hornWas) {
+        this.hornPos = 0;
+        this.hornLp = 0;
+      }
+      this.hornWas = !!hornT;
+      const hornEntry = pack.horn || this.rec.horn || null;
+
+      let peak = 0;
+      for (let i = 0; i < n; i++) {
+        const ampT = activePatEntry ? 1 : 0;
+        this.amp += (ampT - this.amp) * (ampT > this.amp ? this.kAmp : this.kAmpOff);
+
+        let y = 0;
+        const playPatEntry = activePatEntry || (this.packPatName ? pack[this.packPatName] : null);
+        if (this.amp > 1e-5 && playPatEntry) {
+          const pcm = playPatEntry.pcm;
+          const ls = playPatEntry.ls || 0;
+          y = readHornSeamless(pcm, this.packPos, ls) * this.amp;
+          const loopLen = Math.max(1, pcm.length - ls);
+          this.packPos += 1;
+          if (this.packPos >= pcm.length) {
+            this.packPos = ls + ((this.packPos - pcm.length) % loopLen);
+          }
+        }
+
+        // Real MANUAL recording overlay (in standby/PA/radio)
+        this.packManAmp += (manT - this.packManAmp) * (manT > this.packManAmp ? this.kAmp : this.kAmpOff);
+        if (this.packManAmp > 1e-5 && manEntry) {
+          const mPcm = manEntry.pcm;
+          const mLs = manEntry.ls || 0;
+          const mLe = Math.min(mPcm.length, manEntry.le || mPcm.length);
+          const mSpan = Math.max(64, mLe - mLs);
+          const mSlice = mLe < mPcm.length ? mPcm.subarray(0, mLe) : mPcm;
+          y += readHornSeamless(mSlice, this.packManPos, mLs) * this.packManAmp;
+          this.packManPos += 1;
+          if (this.packManPos >= mLe) {
+            this.packManPos = mLs + ((this.packManPos - mLe) % mSpan);
+          }
+        }
+
+        // Real HORN recording (smoothly overrides running siren)
+        this.hg += (hornT - this.hg) * (hornT > this.hg ? this.kHornOn : this.kHornOff);
+        if (this.hg > 1e-5 && hornEntry) {
+          const hPcm = hornEntry.pcm;
+          const hLs = hornEntry.ls || 0;
+          const hLe = Math.min(hPcm.length, hornEntry.le || hPcm.length);
+          const hSlice = hLe < hPcm.length ? hPcm.subarray(0, hLe) : hPcm;
+          const h = readHornSeamless(hSlice, this.hornPos, hLs) * 0.94;
+          const hSpan = Math.max(1, hLe - hLs);
+          this.hornPos += 1;
+          if (this.hornPos >= hLe) {
+            this.hornPos = hLs + ((this.hornPos - hLe) % hSpan);
+          }
+          y = y * (1 - this.hg) + h * this.hg;
+        }
+
+        if (this.wolfPos >= 0 && this.wolf) {
+          y += this.wolf[this.wolfPos] * this.wolfGain;
+          if (++this.wolfPos >= this.wolf.length) this.wolfPos = -1;
+        }
+
+        this.gm += (muteT - this.gm) * this.kMute;
+        y *= this.gm;
+        if (y > 0.96) y = 0.96;
+        else if (y < -0.96) y = -0.96;
+        out[i] = y;
+
+        // Lightweight instantaneous frequency tracker for telemetry display
+        const sign = y >= 0 ? 1 : -1;
+        this.packSinceZc++;
+        if (this.packLastSign < 0 && sign > 0 && this.packSinceZc > 12) {
+          const instHz = sr / this.packSinceZc;
+          if (instHz >= 180 && instHz <= 2400) {
+            this.packHzEst += (instHz - this.packHzEst) * 0.14;
+          }
+          this.packSinceZc = 0;
+        }
+        this.packLastSign = sign;
+
+        const a = y < 0 ? -y : y;
+        if (a > peak) peak = a;
+      }
+
+      this.statPeak = Math.max(this.statPeak, peak);
+      this.statN += n;
+      if (this.statN >= sr / 25 && this.onStat) {
+        const sounding = (this.amp > 0.05 || this.packManAmp > 0.05) && this.gm > 0.05 && s.power;
+        this.onStat({
+          type: 'stat',
+          f: this.hg > 0.5 ? 0 : sounding ? Math.round(this.packHzEst) : 0,
+          horn: this.hg > 0.5,
+          wolf: this.wolfPos >= 0,
+          lvl: this.statPeak,
+          rec: true,
+        });
+        this.statN = 0;
+        this.statPeak = 0;
+      }
+    }
+
     render(out) {
+      if (this.sgu === 'elina' || this.sgu === 'grach') {
+        this.renderRealPack(out);
+        return;
+      }
+
       const n = out.length;
       const sr = this.sr;
       const s = this.s;
