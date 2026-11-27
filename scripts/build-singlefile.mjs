@@ -34,12 +34,12 @@ const wavNames = [
   'elina/yelp',
   'elina/hilo',
   'elina/horn',
-  'elina/manual',
+  'elina/tone',
   'grach/wail',
   'grach/yelp',
   'grach/phaser',
   'grach/horn',
-  'grach/manual',
+  'grach/tone',
 ];
 const wavBase64 = {};
 for (const name of wavNames) {
@@ -47,7 +47,7 @@ for (const name of wavNames) {
   wavBase64[name] = wavBuf.toString('base64');
 }
 
-const phraseIds = ['obochina', 'vpravo_stop', 'prizhatsa', 'strelyat', 'ostanavlivaemsya', 'voditel_stop'];
+const phraseIds = ['obochina', 'vpravo_stop', 'prizhatsa', 'strelyat', 'ostanavlivaemsya'];
 const phrasesBase64 = {};
 for (const id of phraseIds) {
   const mp3Buf = fs.readFileSync(path.join(soundsDir, 'phrases', `${id}.mp3`));

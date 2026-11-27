@@ -1,11 +1,7 @@
 (function (root) {
   'use strict';
 
-  // Exact Premier Hazard 7007 & K-13 patterns calibrated directly to the reference video
-  // - WAIL:   smooth 520 <-> 1800 Hz (4.5s up / 4.1s down)
-  // - YELP:   smooth 540 <-> 1780 Hz (~3.05 cycles/sec, zero-seam continuous sweep)
-  // - HILO:   clean European two-tone 665 / 1095 Hz (0.545s step)
-  // - PULSAR: crisp 710 <-> 1690 Hz trill (~19 Hz)
+  // Exact Premier Hazard 7007 & K-13 HILO / MANUAL / SHORT sweep curves (rendered with real recorded tone.wav!)
   const PAT = {
     wail:   { lo: 520, hi: 1800, up: 4.50,  down: 4.10,  smooth: 0.045,  a: 505, b: 1820 },
     yelp:   { lo: 540, hi: 1780, up: 0.162, down: 0.168, smooth: 0.004,  a: 520, b: 1805 },
@@ -21,13 +17,12 @@
     4: 'phaser',
   };
 
-  // Smooth manual spin-up (~2.7s 520->1805 Hz) and natural coast-down on release.
-  // Pressing MAN again while spinning down above 720 Hz activates crisp PULSAR, stopping cleanly on release.
+  // Manual sweep parameters matching Video 1 (0:00, 0:04, 0:39-0:41):
+  // - 1st MAN hold ramps up 520 -> 1805 Hz; release coasts down smoothly
+  // - 2nd MAN press while coasting down above 720 Hz catches into PULSAR, stopping cleanly on release
   const MAN = { start: 520, max: 1805, rise: 660, tau: 1.45, cut: 295, burst: 720 };
 
-  // Build 4096-sample single-cycle phase-continuous Hazard 7007 carrier wavetable
-  // Calibrated to the exact measured harmonic profile of real Hazard 7007 & K-13 recordings:
-  // h1 = 1.00, h2 = 0.015, h3 = 0.042, h5 = 0.010 -> warm, thick, punchy, ZERO buzz/clipping/aliasing.
+  // Emergency fallback wavetable ONLY for the first ~20ms before WAV buffers finish decoding
   const TABLE_SIZE = 4096;
   const WAVE = new Float32Array(TABLE_SIZE);
   {
@@ -66,12 +61,12 @@
     return a + (b - a) * fr;
   }
 
-  // Seamless crossfade loop reader for HORN recording (eliminates loop-seam click/pop)
-  function readHornSeamless(pcm, pos, ls) {
+  // Seamless cosine crossfade loop reader (zero wrap click/pop on real recordings & tone cycles)
+  function readSeamless(pcm, pos, ls, maxXf) {
     const len = pcm.length;
     if (len === 0) return 0;
     const loopLen = Math.max(64, len - ls);
-    const xf = Math.min(loopLen >> 2, 1300);
+    const xf = Math.min(loopLen >> 2, maxXf || 700);
     const s1 = readLinear(pcm, pos);
     const distToEnd = len - pos;
     if (xf > 16 && distToEnd < xf && pos >= ls) {
@@ -94,6 +89,8 @@
       this.packRec = { elina: {}, grach: {} };
 
       this.ph = 0;
+      this.tonePos = 0;
+      this.recPos = 0;
       this.f = 0;
       this.tf = 0;
       this.f1 = 0;
@@ -110,20 +107,16 @@
       this.shortT = -1;
       this.cutFade = false;
 
-      // Real multi-sample SGU playback state (elina / grach)
-      this.packPatName = '';
-      this.packPos = 0;
-      this.packManPos = 0;
-      this.packManWas = false;
-      this.packManAmp = 0;
-      this.packHzEst = 0;
-      this.packLastSign = 0;
-      this.packSinceZc = 0;
+      // Exclusive non-overlapping active source key ('', 'wail', 'yelp', 'hilo', 'phaser', 'manual', 'short')
+      this.curSrcKey = '';
+      this.zcEstHz = 0;
+      this.zcLastSign = 0;
+      this.zcSince = 0;
 
       this.hg = 0;
       this.hornWas = false;
       this.hornPos = 0;
-      this.hornLp = 0; // gentle smoothing filter removes harsh clipping edges in horn.wav
+      this.hornLp = 0;
       this.wolf = null;
       this.wolfPos = -1;
       this.wolfGain = 1;
@@ -132,10 +125,11 @@
       const k = (sec) => 1 - Math.exp(-1 / (sec * sr));
       this.kAmp = k(0.004);
       this.kAmpOff = k(0.012);
-      this.kAmpCut = k(0.009); // crisp ~25-35ms fade-out after PULSAR release (exact 22.06s video cutoff)
+      this.kAmpCut = k(0.007); // crisp ~25ms cutoff for PULSAR release & clean non-overlapping switch
+      this.kFastSwitch = k(0.0025); // ~8ms fast silent handoff between modes so two sirens NEVER collide
       this.kHornOn = k(0.003);
-      this.kHornOff = k(0.016);
-      this.kHornLp = k(1 / (2 * Math.PI * 2600));
+      this.kHornOff = k(0.014);
+      this.kHornLp = k(1 / (2 * Math.PI * 5200));
       this.kMute = k(0.004);
       this.kMan = k(0.005);
 
@@ -145,8 +139,7 @@
     }
 
     get useRec() {
-      // Siren carrier is always ready phase-continuously; horn/wolf/packs use decoded WAVs
-      return true;
+      return !!(this.rec.wail || this.rec.yelp || this.rec.phaser || this.rec.tone);
     }
 
     message(m) {
@@ -157,19 +150,15 @@
         const next = m.id === 'k13' || m.id === 'elina' || m.id === 'grach' ? m.id : 'hazard';
         if (next !== this.sgu) {
           this.sgu = next;
-          this.packPatName = '';
-          this.packPos = 0;
-          this.packManPos = 0;
-          this.packManWas = false;
-          this.packManAmp = 0;
-          this.hornWas = false;
-          this.hornPos = 0;
+          this.reset();
         }
       } else if (m.type === 'sample') {
         this.rec[m.name] = {
           pcm: m.pcm,
           ls: Math.round((m.loopStart || 0) * this.sr),
           hz: m.hz && m.hz > 20 ? m.hz : 904.4,
+          track: Array.isArray(m.track) ? m.track : null,
+          step: m.step || 0.02,
         };
       } else if (m.type === 'packSample') {
         if (!this.packRec[m.pack]) this.packRec[m.pack] = {};
@@ -177,6 +166,7 @@
           pcm: m.pcm,
           ls: Math.round((m.loopStart || 0) * this.sr),
           le: m.loopEnd ? Math.round(m.loopEnd * this.sr) : m.pcm.length,
+          hz: m.hz && m.hz > 20 ? m.hz : 904.4,
         };
       } else if (m.type === 'wolfData') {
         const pcm = m.pcm;
@@ -204,11 +194,11 @@
       this.wolfPos = -1;
       this.shortT = -1;
       this.cutFade = false;
-      this.packPatName = '';
-      this.packPos = 0;
-      this.packManPos = 0;
-      this.packManWas = false;
-      this.packManAmp = 0;
+      this.curSrcKey = '';
+      this.recPos = 0;
+      this.tonePos = 0;
+      this.hornWas = false;
+      this.hornPos = 0;
     }
 
     enterPat(name, fromSilence) {
@@ -292,7 +282,7 @@
 
       // STANDBY / PA / RADIO mode:
       // - 1st MAN hold smoothly sweeps 520 -> 1805 Hz, release smoothly coasts down
-      // - 2nd MAN press while spinning down above 720 Hz catches into crisp PULSAR, stopping cleanly on release!
+      // - 2nd MAN press while spinning down above 720 Hz catches into crisp PULSAR, stopping cleanly on release
       if (this.mode === 'pat' && !this.trill) {
         this.mf = silent ? 0 : this.f;
         this.mode = 'manual';
@@ -313,7 +303,7 @@
         return 2;
       }
 
-      // Releasing PULSAR stops cleanly within ~35ms (exact 22.06s Hazard 7007 video behavior)
+      // Releasing PULSAR stops cleanly within ~30ms (exact Video 1 0:41 behavior)
       if (this.trill) {
         this.trill = false;
         this.mf = 0;
@@ -330,154 +320,39 @@
       return 3;
     }
 
-    renderRealPack(out) {
-      const n = out.length;
-      const sr = this.sr;
-      const s = this.s;
-      const pack = this.packRec[this.sgu] || {};
-      const muteT = s.power && !s.mute ? 1 : 0;
-
-      // Resolve real recorded siren mode for this SGU pack (100% decoded WAVs, zero synthesis)
-      let wantPat = '';
-      if (s.power && s.tone) {
-        const rawPat = TONE_PAT[s.tone] || 'wail';
-        if (pack[rawPat]) {
-          wantPat = rawPat;
-        } else if (rawPat === 'phaser' && pack.hilo) {
-          wantPat = 'hilo';
-        } else if (rawPat === 'hilo' && pack.phaser) {
-          wantPat = 'phaser';
-        } else {
-          wantPat = pack.wail ? 'wail' : pack.yelp ? 'yelp' : '';
+    getSampleForKey(key) {
+      if (this.sgu === 'elina' || this.sgu === 'grach') {
+        const pack = this.packRec[this.sgu] || {};
+        if (key === 'wail' && pack.wail) return { kind: 'clip', entry: pack.wail, xf: 650 };
+        if (key === 'yelp' && pack.yelp) return { kind: 'clip', entry: pack.yelp, xf: 360 };
+        if (key === 'hilo') {
+          if (pack.hilo) return { kind: 'clip', entry: pack.hilo, xf: 300 };
+          if (pack.phaser) return { kind: 'clip', entry: pack.phaser, xf: 300 };
         }
+        if (key === 'phaser') {
+          if (pack.phaser) return { kind: 'clip', entry: pack.phaser, xf: 300 };
+          // For Elina (which has no separate phaser WAV), use real Elina tone.wav swept at PULSAR cadence!
+          if (pack.tone) return { kind: 'tone', entry: pack.tone };
+        }
+        if (key === 'manual' || key === 'short') {
+          if (pack.tone) return { kind: 'tone', entry: pack.tone };
+        }
+        if (pack.tone) return { kind: 'tone', entry: pack.tone };
+        return null;
       }
 
-      const activePatEntry = wantPat ? pack[wantPat] : null;
-      if (wantPat && wantPat !== this.packPatName) {
-        this.packPatName = wantPat;
-        this.packPos = 0;
-      } else if (!wantPat && this.amp < 0.004) {
-        this.packPatName = '';
-        this.packPos = 0;
+      // Premier Hazard 7007 & K-13: 100% genuine video-extracted recordings!
+      if (key === 'wail' && this.rec.wail) return { kind: 'clip', entry: this.rec.wail, xf: 700 };
+      if (key === 'yelp' && this.rec.yelp) return { kind: 'clip', entry: this.rec.yelp, xf: 320 };
+      if (key === 'phaser' && this.rec.phaser) return { kind: 'clip', entry: this.rec.phaser, xf: 260 };
+      if ((key === 'hilo' || key === 'manual' || key === 'short') && this.rec.tone) {
+        return { kind: 'tone', entry: this.rec.tone };
       }
-
-      // Real MANUAL recording when holding MAN in standby / pa / radio
-      const manT =
-        s.power && !s.tone && (s.man === 'manual' || s.man === 'pa') && s.manHeld && !s.mute ? 1 : 0;
-      if (manT && !this.packManWas) {
-        this.packManPos = 0;
-      }
-      this.packManWas = !!manT;
-      const manEntry = pack.manual || null;
-
-      // Real HORN recording for this SGU pack
-      const hornT = s.power && s.horn && !s.mute ? 1 : 0;
-      if (hornT && !this.hornWas) {
-        this.hornPos = 0;
-        this.hornLp = 0;
-      }
-      this.hornWas = !!hornT;
-      const hornEntry = pack.horn || this.rec.horn || null;
-
-      let peak = 0;
-      for (let i = 0; i < n; i++) {
-        const ampT = activePatEntry ? 1 : 0;
-        this.amp += (ampT - this.amp) * (ampT > this.amp ? this.kAmp : this.kAmpOff);
-
-        let y = 0;
-        const playPatEntry = activePatEntry || (this.packPatName ? pack[this.packPatName] : null);
-        if (this.amp > 1e-5 && playPatEntry) {
-          const pcm = playPatEntry.pcm;
-          const ls = playPatEntry.ls || 0;
-          y = readHornSeamless(pcm, this.packPos, ls) * this.amp;
-          const loopLen = Math.max(1, pcm.length - ls);
-          this.packPos += 1;
-          if (this.packPos >= pcm.length) {
-            this.packPos = ls + ((this.packPos - pcm.length) % loopLen);
-          }
-        }
-
-        // Real MANUAL recording overlay (in standby/PA/radio)
-        this.packManAmp += (manT - this.packManAmp) * (manT > this.packManAmp ? this.kAmp : this.kAmpOff);
-        if (this.packManAmp > 1e-5 && manEntry) {
-          const mPcm = manEntry.pcm;
-          const mLs = manEntry.ls || 0;
-          const mLe = Math.min(mPcm.length, manEntry.le || mPcm.length);
-          const mSpan = Math.max(64, mLe - mLs);
-          const mSlice = mLe < mPcm.length ? mPcm.subarray(0, mLe) : mPcm;
-          y += readHornSeamless(mSlice, this.packManPos, mLs) * this.packManAmp;
-          this.packManPos += 1;
-          if (this.packManPos >= mLe) {
-            this.packManPos = mLs + ((this.packManPos - mLe) % mSpan);
-          }
-        }
-
-        // Real HORN recording (smoothly overrides running siren)
-        this.hg += (hornT - this.hg) * (hornT > this.hg ? this.kHornOn : this.kHornOff);
-        if (this.hg > 1e-5 && hornEntry) {
-          const hPcm = hornEntry.pcm;
-          const hLs = hornEntry.ls || 0;
-          const hLe = Math.min(hPcm.length, hornEntry.le || hPcm.length);
-          const hSlice = hLe < hPcm.length ? hPcm.subarray(0, hLe) : hPcm;
-          const h = readHornSeamless(hSlice, this.hornPos, hLs) * 0.94;
-          const hSpan = Math.max(1, hLe - hLs);
-          this.hornPos += 1;
-          if (this.hornPos >= hLe) {
-            this.hornPos = hLs + ((this.hornPos - hLe) % hSpan);
-          }
-          y = y * (1 - this.hg) + h * this.hg;
-        }
-
-        if (this.wolfPos >= 0 && this.wolf) {
-          y += this.wolf[this.wolfPos] * this.wolfGain;
-          if (++this.wolfPos >= this.wolf.length) this.wolfPos = -1;
-        }
-
-        this.gm += (muteT - this.gm) * this.kMute;
-        y *= this.gm;
-        if (y > 0.96) y = 0.96;
-        else if (y < -0.96) y = -0.96;
-        out[i] = y;
-
-        // Lightweight instantaneous frequency tracker for telemetry display
-        const sign = y >= 0 ? 1 : -1;
-        this.packSinceZc++;
-        if (this.packLastSign < 0 && sign > 0 && this.packSinceZc > 12) {
-          const instHz = sr / this.packSinceZc;
-          if (instHz >= 180 && instHz <= 2400) {
-            this.packHzEst += (instHz - this.packHzEst) * 0.14;
-          }
-          this.packSinceZc = 0;
-        }
-        this.packLastSign = sign;
-
-        const a = y < 0 ? -y : y;
-        if (a > peak) peak = a;
-      }
-
-      this.statPeak = Math.max(this.statPeak, peak);
-      this.statN += n;
-      if (this.statN >= sr / 25 && this.onStat) {
-        const sounding = (this.amp > 0.05 || this.packManAmp > 0.05) && this.gm > 0.05 && s.power;
-        this.onStat({
-          type: 'stat',
-          f: this.hg > 0.5 ? 0 : sounding ? Math.round(this.packHzEst) : 0,
-          horn: this.hg > 0.5,
-          wolf: this.wolfPos >= 0,
-          lvl: this.statPeak,
-          rec: true,
-        });
-        this.statN = 0;
-        this.statPeak = 0;
-      }
+      if (this.rec.tone) return { kind: 'tone', entry: this.rec.tone };
+      return null;
     }
 
     render(out) {
-      if (this.sgu === 'elina' || this.sgu === 'grach') {
-        this.renderRealPack(out);
-        return;
-      }
-
       const n = out.length;
       const sr = this.sr;
       const s = this.s;
@@ -492,15 +367,31 @@
       }
       this.hornWas = !!hornT;
 
+      // Wolf one-shot NEVER overlaps active siren, manual sweep, or horn
+      if (s.tone || hornT || (s.manHeld && s.man !== 'wolf') || !s.power) {
+        this.wolfPos = -1;
+      }
+
+      // Determine exclusive target source key
+      let wantKey = '';
+      if (how === 1 && this.patName) {
+        wantKey = this.patName;
+      } else if (how === 2 || (how === 3 && this.mf > 0)) {
+        wantKey = 'manual';
+      } else if (how === 4) {
+        wantKey = 'short';
+      }
+
+      const pack = this.sgu === 'elina' || this.sgu === 'grach' ? this.packRec[this.sgu] || {} : null;
+      const hornEntry = pack && pack.horn ? pack.horn : this.rec.horn || null;
       const decay = Math.exp(-dt / MAN.tau);
       const ks = how === 1 && this.pat ? 1 - Math.exp(-dt / this.pat.smooth) : 0;
-      const hornR = this.rec.horn;
-      const hornPitch = this.sgu === 'k13' ? 1.03 : 1.0;
 
       let peak = 0;
 
       for (let i = 0; i < n; i++) {
-        let ampT = 0;
+        // Update frequency curve for tone-driven modes (HILO, MANUAL, SHORT, fallback)
+        let activeWant = wantKey;
         if (how === 1) {
           const p = this.pat;
           if (this.patName === 'hilo') {
@@ -524,51 +415,130 @@
           }
           this.f1 += (this.tf - this.f1) * ks;
           this.f += (this.f1 - this.f) * ks;
-          ampT = 1;
         } else if (how === 2) {
           if (this.mf < MAN.start) this.mf = MAN.start;
           const room = Math.max(0.18, Math.min(1, (MAN.max - this.mf) / 160));
           this.mf = Math.min(MAN.max, this.mf + MAN.rise * dt * room);
           this.f += (this.mf - this.f) * this.kMan;
-          ampT = 1;
         } else if (how === 3 && this.mf > 0) {
           this.mf *= decay;
           this.f += (this.mf - this.f) * this.kMan;
-          ampT = Math.max(0, Math.min(1, (this.mf - MAN.cut) / 190));
           if (this.mf < MAN.cut * 0.88) {
             this.mf = 0;
             this.wasFalling = false;
+            activeWant = '';
           }
         } else if (how === 4) {
           const pNorm = Math.min(1, this.shortT / 0.21);
           this.f = 700 + 960 * Math.sin(pNorm * Math.PI * 0.5);
-          ampT = this.shortT < 0.20 ? 1 : Math.max(0, 1 - (this.shortT - 0.20) / 0.05);
         }
 
         if (!Number.isFinite(this.f) || this.f < 0) this.f = 0;
 
-        const ampRate =
-          ampT > this.amp ? this.kAmp : this.cutFade ? this.kAmpCut : this.kAmpOff;
-        this.amp += (ampT - this.amp) * ampRate;
+        // Clean non-overlapping switch: fade previous mode cleanly to near-zero BEFORE starting new mode
+        let targetAmp = 0;
+        let ampRate = this.kAmpOff;
 
-        // Phase-continuous smooth Hazard 7007 / K-13 carrier wave (zero wrap clicks or clipping)
-        let y = 0;
-        if (this.amp > 1e-5 && this.f > 40) {
-          this.ph += this.f * dt;
-          if (this.ph >= 1) this.ph -= Math.floor(this.ph);
-          y = readWave(this.ph) * this.amp;
+        if (activeWant !== this.curSrcKey) {
+          if (this.curSrcKey === '' || this.amp <= 0.015) {
+            this.curSrcKey = activeWant;
+            this.recPos = 0;
+            if (activeWant) {
+              targetAmp =
+                how === 3 && this.mf > 0
+                  ? Math.max(0, Math.min(1, (this.mf - MAN.cut) / 190))
+                  : how === 4 && this.shortT >= 0.2
+                  ? Math.max(0, 1 - (this.shortT - 0.2) / 0.05)
+                  : 1;
+              ampRate = this.kAmp;
+            }
+          } else {
+            // Smooth fast ~8ms silence handoff so two modes NEVER sound mixed together
+            targetAmp = 0;
+            ampRate = this.kFastSwitch;
+          }
+        } else if (this.curSrcKey !== '') {
+          if (how === 3 && this.mf > 0) {
+            targetAmp = Math.max(0, Math.min(1, (this.mf - MAN.cut) / 190));
+            ampRate = this.kAmpOff;
+          } else if (how === 4) {
+            targetAmp = this.shortT < 0.2 ? 1 : Math.max(0, 1 - (this.shortT - 0.2) / 0.05);
+            ampRate = targetAmp > this.amp ? this.kAmp : this.kAmpCut;
+          } else {
+            targetAmp = 1;
+            ampRate = targetAmp > this.amp ? this.kAmp : this.kAmpOff;
+          }
+        } else {
+          targetAmp = 0;
+          ampRate = this.cutFade ? this.kAmpCut : this.kAmpOff;
         }
 
-        // Authentic HORN (crossfade-looped & softly lowpass-smoothed to remove clipped rasp/comb artifacts)
+        this.amp += (targetAmp - this.amp) * ampRate;
+        if (this.amp <= 0.005 && activeWant === '') {
+          this.curSrcKey = '';
+        }
+
+        // Render exclusive active audio using genuine recorded WAVs
+        let y = 0;
+        if (this.amp > 1e-5 && this.curSrcKey !== '') {
+          const srcSpec = this.getSampleForKey(this.curSrcKey);
+          if (srcSpec && srcSpec.kind === 'clip') {
+            const entry = srcSpec.entry;
+            const pcm = entry.pcm;
+            const ls = entry.ls || 0;
+            y = readSeamless(pcm, this.recPos, ls, srcSpec.xf) * this.amp;
+            const span = Math.max(1, pcm.length - ls);
+            this.recPos += 1;
+            if (this.recPos >= pcm.length) {
+              this.recPos = ls + ((this.recPos - pcm.length) % span);
+            }
+            if (entry.track && entry.track.length > 0) {
+              const idx = Math.floor((this.recPos / sr) / entry.step) % entry.track.length;
+              this.zcEstHz = entry.track[idx];
+            } else {
+              const sign = y >= 0 ? 1 : -1;
+              this.zcSince++;
+              if (this.zcLastSign < 0 && sign > 0 && this.zcSince > 10) {
+                const est = sr / this.zcSince;
+                if (est >= 220 && est <= 2300) {
+                  this.zcEstHz += (est - this.zcEstHz) * 0.16;
+                }
+                this.zcSince = 0;
+              }
+              this.zcLastSign = sign;
+            }
+          } else if (srcSpec && srcSpec.kind === 'tone' && this.f > 40) {
+            const entry = srcSpec.entry;
+            const pcm = entry.pcm;
+            const step = this.f / entry.hz;
+            y = readSeamless(pcm, this.tonePos, 0, 48) * this.amp;
+            this.tonePos += step;
+            if (this.tonePos >= pcm.length) {
+              this.tonePos %= pcm.length;
+            }
+            this.zcEstHz = this.f;
+          } else if (this.f > 40) {
+            this.ph += this.f * dt;
+            if (this.ph >= 1) this.ph -= Math.floor(this.ph);
+            y = readWave(this.ph) * this.amp;
+            this.zcEstHz = this.f;
+          }
+        }
+
+        // Authentic HORN (crossfade-looped real WAV recording, smoothly overrides siren)
         this.hg += (hornT - this.hg) * (hornT > this.hg ? this.kHornOn : this.kHornOff);
-        if (this.hg > 1e-5 && hornR) {
-          const rawH = readHornSeamless(hornR.pcm, this.hornPos, hornR.ls);
+        if (this.hg > 1e-5 && hornEntry) {
+          const hPcm = hornEntry.pcm;
+          const hLs = hornEntry.ls || 0;
+          const hLe = Math.min(hPcm.length, hornEntry.le || hPcm.length);
+          const hSlice = hLe < hPcm.length ? hPcm.subarray(0, hLe) : hPcm;
+          const rawH = readSeamless(hSlice, this.hornPos, hLs, 480);
           this.hornLp += (rawH - this.hornLp) * this.kHornLp;
-          const h = this.hornLp * 0.92;
-          const loopLen = Math.max(1, hornR.pcm.length - hornR.ls);
-          this.hornPos += hornPitch;
-          if (this.hornPos >= hornR.pcm.length) {
-            this.hornPos = hornR.ls + ((this.hornPos - hornR.pcm.length) % loopLen);
+          const h = this.hornLp * 0.94;
+          const hSpan = Math.max(1, hLe - hLs);
+          this.hornPos += 1;
+          if (this.hornPos >= hLe) {
+            this.hornPos = hLs + ((this.hornPos - hLe) % hSpan);
           }
           y = y * (1 - this.hg) + h * this.hg;
         }
@@ -591,13 +561,14 @@
       this.statN += n;
       if (this.statN >= sr / 25 && this.onStat) {
         const sounding = this.amp * this.gm > 0.05 && s.power;
+        const outHz = this.hg > 0.5 ? 0 : sounding ? Math.round(this.zcEstHz || this.f) : 0;
         this.onStat({
           type: 'stat',
-          f: this.hg > 0.5 ? 0 : sounding ? Math.round(this.f) : 0,
+          f: outHz,
           horn: this.hg > 0.5,
           wolf: this.wolfPos >= 0,
           lvl: this.statPeak,
-          rec: true,
+          rec: this.useRec,
         });
         this.statN = 0;
         this.statPeak = 0;

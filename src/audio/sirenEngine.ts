@@ -23,8 +23,7 @@ export type PhraseId =
   | 'vpravo_stop'
   | 'prizhatsa'
   | 'strelyat'
-  | 'ostanavlivaemsya'
-  | 'voditel_stop';
+  | 'ostanavlivaemsya';
 
 export interface EngineSnapshot {
   powered: boolean;
@@ -162,6 +161,7 @@ export class SirenAudioEngine {
     pcm: Float32Array;
     loopStart: number;
     loopEnd?: number;
+    hz?: number;
   }> = [];
   private wolfCache: Float32Array | null = null;
   private workletStatSeen = false;
@@ -235,12 +235,12 @@ export class SirenAudioEngine {
       'elina/yelp',
       'elina/hilo',
       'elina/horn',
-      'elina/manual',
+      'elina/tone',
       'grach/wail',
       'grach/yelp',
       'grach/phaser',
       'grach/horn',
-      'grach/manual',
+      'grach/tone',
     ] as const;
     const phraseUrls = [
       'sounds/phrases/obochina.mp3',
@@ -248,7 +248,6 @@ export class SirenAudioEngine {
       'sounds/phrases/prizhatsa.mp3',
       'sounds/phrases/strelyat.mp3',
       'sounds/phrases/ostanavlivaemsya.mp3',
-      'sounds/phrases/voditel_stop.mp3',
     ];
     await Promise.all([
       fetch('sounds/meta.json')
@@ -490,6 +489,7 @@ export class SirenAudioEngine {
           pcm: copy,
           loopStart: item.loopStart,
           loopEnd: item.loopEnd,
+          hz: item.hz,
         },
         [copy.buffer]
       );
@@ -658,17 +658,18 @@ export class SirenAudioEngine {
         name: string;
         loopStart: number;
         loopEnd?: number;
+        hz?: number;
       }> = [
         { pack: 'elina', name: 'wail', loopStart: 0 },
         { pack: 'elina', name: 'yelp', loopStart: 0 },
         { pack: 'elina', name: 'hilo', loopStart: 0 },
         { pack: 'elina', name: 'horn', loopStart: 0.12, loopEnd: 0.58 },
-        { pack: 'elina', name: 'manual', loopStart: 4.85, loopEnd: 5.55 },
+        { pack: 'elina', name: 'tone', loopStart: 0, hz: 1062.4 },
         { pack: 'grach', name: 'wail', loopStart: 0 },
         { pack: 'grach', name: 'yelp', loopStart: 0 },
         { pack: 'grach', name: 'phaser', loopStart: 0 },
         { pack: 'grach', name: 'horn', loopStart: 0.12, loopEnd: 1.05 },
-        { pack: 'grach', name: 'manual', loopStart: 0.70, loopEnd: 2.35 },
+        { pack: 'grach', name: 'tone', loopStart: 0, hz: 1329.99 },
       ];
 
       const loadPacks = Promise.all(
@@ -695,6 +696,7 @@ export class SirenAudioEngine {
               pcm: pcmCache,
               loopStart: spec.loopStart,
               loopEnd: spec.loopEnd,
+              hz: spec.hz,
             });
             this.sendFn?.(
               {
@@ -704,6 +706,7 @@ export class SirenAudioEngine {
                 pcm: pcmTransfer,
                 loopStart: spec.loopStart,
                 loopEnd: spec.loopEnd,
+                hz: spec.hz,
               },
               [pcmTransfer.buffer]
             );

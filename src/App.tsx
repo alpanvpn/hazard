@@ -66,7 +66,6 @@ const DPS_PHRASES: { id: PhraseId; label: string; full: string }[] = [
   { id: 'prizhatsa', label: 'Прижаться!', full: 'Вправо прижаться, остановиться!' },
   { id: 'ostanavlivaemsya', label: 'Остановка!', full: 'Останавливайся, разобьёшься!' },
   { id: 'strelyat', label: 'Стрелять!', full: 'Останавливаемся, стрелять будем!' },
-  { id: 'voditel_stop', label: 'Водитель, стоп!', full: 'Водитель! Остановите транспортное средство!' },
 ];
 
 const readCookie = (key: string): string | null => {
@@ -784,13 +783,7 @@ export default function App() {
     [engineSnap.activePhrase]
   );
 
-  const altTargetMode = useMemo(() => {
-    const raw = ALT_MODE_MAP[engineSnap.mode];
-    if (!raw) return undefined;
-    if (sguSystem === 'elina' && raw === 'phaser') return 'hilo';
-    if (sguSystem === 'grach' && raw === 'hilo') return 'phaser';
-    return raw;
-  }, [engineSnap.mode, sguSystem]);
+  const altTargetMode = useMemo(() => ALT_MODE_MAP[engineSnap.mode], [engineSnap.mode]);
   const displayStatus = useMemo(() => {
     if (!engineSnap.powered) {
       return { title: 'ВЫКЛЮЧЕНО', subtitle: sguSpec.shortName };
@@ -1052,7 +1045,7 @@ export default function App() {
                         className={`k13-key no-select ${manIsLit ? 'lit-gold pressed' : ''}`}
                       >
                         <span className="text-xs sm:text-sm font-extrabold tracking-wider">MANUAL</span>
-                        <span className="text-[10px] font-semibold text-white/55">Ручная</span>
+                        <span className="text-[10px] font-semibold text-white/55">Удерж. / смена</span>
                       </button>
 
                       <button
@@ -1305,55 +1298,45 @@ export default function App() {
 
                       <div className="hw-keys-bezel">
                         <div className="grid grid-cols-2 gap-2.5">
-                          <div className="flex flex-col items-center gap-1">
-                            <span
-                              className="text-[11px] font-extrabold tracking-wider leading-none"
-                              style={{ color: sguSpec.accentColor }}
-                            >
+                          <button
+                            type="button"
+                            onPointerDown={onManDown}
+                            onPointerUp={onManUp}
+                            onPointerCancel={onManUp}
+                            onLostPointerCapture={onManUp}
+                            aria-label={`${sguSpec.manLabel}: удержание / смена`}
+                            aria-pressed={manIsLit}
+                            className={`hw-white-key no-select px-1.5 text-center ${
+                              manIsLit ? 'man-lit' : ''
+                            } ${manPressed ? 'pressed' : ''}`}
+                          >
+                            <span className="text-[15px] sm:text-base font-extrabold tracking-wide leading-tight">
                               {sguSpec.manLabel}
                             </span>
-                            <button
-                              type="button"
-                              onPointerDown={onManDown}
-                              onPointerUp={onManUp}
-                              onPointerCancel={onManUp}
-                              onLostPointerCapture={onManUp}
-                              aria-label={`${sguSpec.manLabel}: ручная сирена / пульсар`}
-                              aria-pressed={manIsLit}
-                              className={`hw-white-key no-select ${manIsLit ? 'man-lit' : ''} ${
-                                manPressed ? 'pressed' : ''
-                              }`}
-                            >
-                              <span className="text-sm sm:text-[15px] font-extrabold tracking-wide">
-                                {sguSpec.manLabel}
-                              </span>
-                            </button>
-                          </div>
+                            <span className="text-[9.5px] sm:text-[10px] font-bold opacity-70 leading-tight mt-0.5">
+                              Удержание / смена
+                            </span>
+                          </button>
 
-                          <div className="flex flex-col items-center gap-1">
-                            <span
-                              className="text-[11px] font-extrabold tracking-wider leading-none"
-                              style={{ color: sguSpec.accentColor }}
-                            >
+                          <button
+                            type="button"
+                            onPointerDown={onHornDown}
+                            onPointerUp={onHornUp}
+                            onPointerCancel={onHornUp}
+                            onLostPointerCapture={onHornUp}
+                            aria-label={`${sguSpec.hornLabel}: держи для сигнала`}
+                            aria-pressed={hornIsLit}
+                            className={`hw-white-key no-select px-1.5 text-center ${
+                              hornIsLit ? 'horn-lit' : ''
+                            } ${hornPressed ? 'pressed' : ''}`}
+                          >
+                            <span className="text-[15px] sm:text-base font-extrabold tracking-wide leading-tight">
                               {sguSpec.hornLabel}
                             </span>
-                            <button
-                              type="button"
-                              onPointerDown={onHornDown}
-                              onPointerUp={onHornUp}
-                              onPointerCancel={onHornUp}
-                              onLostPointerCapture={onHornUp}
-                              aria-label={`${sguSpec.hornLabel}: воздушный сигнал`}
-                              aria-pressed={hornIsLit}
-                              className={`hw-white-key no-select ${hornIsLit ? 'horn-lit' : ''} ${
-                                hornPressed ? 'pressed' : ''
-                              }`}
-                            >
-                              <span className="text-sm sm:text-[15px] font-extrabold tracking-wide">
-                                {sguSpec.hornLabel}
-                              </span>
-                            </button>
-                          </div>
+                            <span className="text-[9.5px] sm:text-[10px] font-bold opacity-70 leading-tight mt-0.5">
+                              Держи для сигнала
+                            </span>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1385,8 +1368,9 @@ export default function App() {
                 </span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {DPS_PHRASES.map((phrase) => {
+                {DPS_PHRASES.map((phrase, idx) => {
                   const active = engineSnap.activePhrase === phrase.id;
+                  const isLast = idx === DPS_PHRASES.length - 1;
                   return (
                     <button
                       key={phrase.id}
@@ -1398,8 +1382,8 @@ export default function App() {
                       aria-label={phrase.full}
                       aria-pressed={active}
                       className={`siren-btn min-h-[46px] px-2.5 py-2 text-[13px] whitespace-nowrap truncate ${
-                        active ? 'horn-active' : ''
-                      }`}
+                        isLast ? 'col-span-2 sm:col-span-1' : ''
+                      } ${active ? 'horn-active' : ''}`}
                     >
                       {phrase.label}
                     </button>
