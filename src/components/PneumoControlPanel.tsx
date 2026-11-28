@@ -125,6 +125,9 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
   const presetTimerRef = useRef<number | null>(null);
   const pointerIdRef = useRef<number | null>(null);
 
+  const unloadOnStopRef = useRef(false);
+  const hitLimitRef = useRef(false);
+
   useEffect(() => {
     try {
       window.localStorage.setItem('alpan_pneumo_bar', JSON.stringify(pressures));
@@ -140,7 +143,7 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
       holdTimerRef.current = null;
     }
     setActiveControl(null);
-    audioEngine?.stopAir();
+    audioEngine?.stopAir(true);
   }, [audioEngine]);
 
   const clearPresetAnim = useCallback(() => {
@@ -152,10 +155,11 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
 
   useEffect(() => {
     if (stopSignal > 0) {
+      unloadOnStopRef.current = false;
       stopAxleHold();
       clearPresetAnim();
       setCompressorOn(false);
-      void audioEngine?.setCompressorSound(false);
+      void audioEngine?.setCompressorSound(false, false);
     }
   }, [stopSignal, stopAxleHold, clearPresetAnim, audioEngine]);
 
@@ -175,10 +179,12 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
     };
   }, [stopAxleHold]);
 
-  // Compressor gently raises low bags up toward working pressure (6.3 front / 5.8 rear, like 00:35-00:37 in video)
-  // and turns off automatically when finished
+  // Compressor gently raises low bags up toward working pressure (6.3 front / 5.8 rear)
+  // and turns off automatically with a governor unloader sneeze ("пш-тсс") when finished
   useEffect(() => {
-    void audioEngine?.setCompressorSound(compressorOn);
+    const withUnload = unloadOnStopRef.current;
+    unloadOnStopRef.current = false;
+    void audioEngine?.setCompressorSound(compressorOn, !compressorOn && withUnload);
     if (!compressorOn) return;
 
     const id = window.setInterval(() => {
@@ -194,6 +200,7 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
         return next;
       });
       if (reached) {
+        unloadOnStopRef.current = true;
         setCompressorOn(false);
       }
     }, 340);
@@ -218,9 +225,11 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
     e.preventDefault();
     clearPresetAnim();
     setActivePreset(null);
+    hitLimitRef.current = false;
 
     // Dropping air immediately cancels compressor so compressor never fights lowering
     if (dir === 'down' && compressorOn) {
+      unloadOnStopRef.current = false;
       setCompressorOn(false);
     }
 
@@ -263,17 +272,20 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
         moved = nrl !== prev.rl || nrr !== prev.rr;
         return { ...prev, rl: nrl, rr: nrr };
       });
-      if (!moved) {
-        audioEngine?.stopAir();
+      if (!moved && !hitLimitRef.current) {
+        hitLimitRef.current = true;
+        audioEngine?.stopAir(false);
+        void audioEngine?.playLimitStop(dir);
       }
     };
 
     if (canMoveNow()) {
-      void audioEngine?.startAir(dir === 'down' ? 'dump' : 'fill');
+      void audioEngine?.startAir(dir === 'down' ? 'dump' : 'fill', true);
+      applyStep();
     } else {
-      audioEngine?.playValveClick(false);
+      hitLimitRef.current = true;
+      void audioEngine?.playLimitStop(dir);
     }
-    applyStep();
 
     holdTimerRef.current = window.setInterval(() => {
       applyStep();
@@ -284,6 +296,7 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
     stopAxleHold();
     clearPresetAnim();
     if (num === 1 && compressorOn) {
+      unloadOnStopRef.current = false;
       setCompressorOn(false);
     }
     onHaptic([12, 24, 12]);
@@ -301,7 +314,7 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
       cur.rl === target.rl &&
       cur.rr === target.rr
     ) {
-      audioEngine?.playValveClick(true);
+      void audioEngine?.playQuickBurst(num === 1 ? 'dump' : 'fill', 260);
       return;
     }
 
@@ -331,7 +344,23 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
 
   const toggleCompressor = () => {
     onHaptic(14);
-    setCompressorOn((prev) => !prev);
+    setCompressorOn((prev) => {
+      if (prev) {
+        unloadOnStopRef.current = true;
+      }
+      return !prev;
+    });
+  };
+
+  const handleQuickDump = () => {
+    onHaptic([14, 18, 12]);
+    void audioEngine?.playQuickBurst('dump', 420);
+    setPressures((prev) => ({
+      fl: clampBar(prev.fl > 0.2 ? prev.fl - 0.1 : prev.fl),
+      fr: clampBar(prev.fr > 0.2 ? prev.fr - 0.1 : prev.fr),
+      rl: clampBar(prev.rl > 0.2 ? prev.rl - 0.1 : prev.rl),
+      rr: clampBar(prev.rr > 0.2 ? prev.rr - 0.1 : prev.rr),
+    }));
   };
 
   const frontBusy = activeControl === 'front-up' || activeControl === 'front-down';
@@ -372,6 +401,7 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
             onPointerUp={stopAxleHold}
             onPointerCancel={stopAxleHold}
             onLostPointerCapture={stopAxleHold}
+            onContextMenu={(e) => e.preventDefault()}
             aria-pressed={activeControl === 'front-up'}
             className={`siren-btn no-select py-2.5 px-3 text-xs sm:text-[13px] font-extrabold tracking-wide flex items-center justify-center gap-1.5 ${
               activeControl === 'front-up' ? 'active pressed' : ''
@@ -386,6 +416,7 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
             onPointerUp={stopAxleHold}
             onPointerCancel={stopAxleHold}
             onLostPointerCapture={stopAxleHold}
+            onContextMenu={(e) => e.preventDefault()}
             aria-pressed={activeControl === 'front-down'}
             className={`siren-btn no-select py-2.5 px-3 text-xs sm:text-[13px] font-extrabold tracking-wide flex items-center justify-center gap-1.5 ${
               activeControl === 'front-down' ? 'horn-active pressed' : ''
@@ -409,6 +440,7 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
             onPointerUp={stopAxleHold}
             onPointerCancel={stopAxleHold}
             onLostPointerCapture={stopAxleHold}
+            onContextMenu={(e) => e.preventDefault()}
             aria-pressed={activeControl === 'rear-up'}
             className={`siren-btn no-select py-2.5 px-3 text-xs sm:text-[13px] font-extrabold tracking-wide flex items-center justify-center gap-1.5 ${
               activeControl === 'rear-up' ? 'active pressed' : ''
@@ -423,6 +455,7 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
             onPointerUp={stopAxleHold}
             onPointerCancel={stopAxleHold}
             onLostPointerCapture={stopAxleHold}
+            onContextMenu={(e) => e.preventDefault()}
             aria-pressed={activeControl === 'rear-down'}
             className={`siren-btn no-select py-2.5 px-3 text-xs sm:text-[13px] font-extrabold tracking-wide flex items-center justify-center gap-1.5 ${
               activeControl === 'rear-down' ? 'horn-active pressed' : ''
@@ -467,6 +500,14 @@ export const PneumoControlPanel: React.FC<PneumoControlPanelProps> = ({
           КОМПРЕССОР
         </button>
       </div>
+
+      <button
+        type="button"
+        onClick={handleQuickDump}
+        className="siren-btn w-full py-2 px-3 text-xs font-extrabold tracking-wider text-white/90"
+      >
+        ПШИК · СБРОС ВОЗДУХА
+      </button>
 
       {compressorOn && (
         <p className="text-center text-xs font-extrabold tracking-widest text-[var(--acc)] pt-0.5">

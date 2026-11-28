@@ -1,9 +1,13 @@
 import type { SirenAudioEngine } from './sirenEngine';
 
 /**
- * Clean, subtle, authentic pneumatic air-suspension audio engine.
- * Balanced gains so valve clicks, air release ("псссш"), fill rush, and low compressor purr
- * sound realistic without harsh white-noise blasts or synthetic high-pitched tones.
+ * Authentic 4-contour pneumatic air-suspension audio engine across all SGU systems.
+ * Separate physical acoustics for every pneumo action:
+ *  - Solenoid valve clack (electro-pneumatic coil + brass spool click)
+ *  - Exhaust dump ("ОПУСТИТЬ" -> loud open-air "ПШШШШШЬ!" decompression blast)
+ *  - Air bag fill ("ПОДНЯТЬ" -> muffled pressurized manifold rush + bag inflation thrum)
+ *  - Piston compressor ("КОМПРЕССОР" -> real 12V Berkut/Viair motor hum + 21.5 Hz cranking chug)
+ *  - Governor unloader sneeze ("ЦС-ПШИК!") on completion
  */
 export class PneumoAudioEngine {
   private sirenEngine: SirenAudioEngine;
@@ -17,11 +21,21 @@ export class PneumoAudioEngine {
 
   private activeAirNode: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
   private activeAirKind: 'fill' | 'dump' | null = null;
+  private airStartAt = 0;
+  private stopDelayTimer: number | null = null;
   private compNode: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
   private airReqToken = 0;
+  private burstTimer: number | null = null;
 
   constructor(sirenEngine: SirenAudioEngine) {
     this.sirenEngine = sirenEngine;
+  }
+
+  private getReadySync(): { ctx: AudioContext; dest: AudioNode } | null {
+    if (this.ctx && this.dest && this.valveClickBuf && this.ctx.state === 'running') {
+      return { ctx: this.ctx, dest: this.dest };
+    }
+    return null;
   }
 
   private async ensureReady(): Promise<{ ctx: AudioContext; dest: AudioNode } | null> {
@@ -31,6 +45,8 @@ export class PneumoAudioEngine {
       this.ctx = bus.ctx;
       this.dest = bus.destination;
       this.buildBuffers(bus.ctx);
+    } else if (!this.valveClickBuf) {
+      this.buildBuffers(bus.ctx);
     }
     return { ctx: bus.ctx, dest: bus.destination };
   }
@@ -38,151 +54,292 @@ export class PneumoAudioEngine {
   private buildBuffers(ctx: AudioContext) {
     const sr = ctx.sampleRate;
 
-    // 1. Soft pneumatic solenoid relay click (14ms low-mid damped thud, zero piercing metallic ping)
+    // 1. Crisp electro-pneumatic brass solenoid clack (mechanical spool snap, no tonal beep)
     {
-      const len = Math.max(128, Math.floor(sr * 0.014));
+      const len = Math.max(128, Math.floor(sr * 0.012));
       const buf = ctx.createBuffer(1, len, sr);
       const ch = buf.getChannelData(0);
-      let lp = 0;
+      let hpPrev = 0;
+      let hpOut = 0;
       for (let i = 0; i < len; i++) {
         const t = i / sr;
-        const env = Math.exp(-t / 0.0028);
-        const body = Math.sin(2 * Math.PI * 240 * t) * 0.65;
+        const win = Math.sin((Math.PI * i) / (len - 1));
+        const snap = Math.exp(-t / 0.0016);
         const w = Math.random() * 2 - 1;
-        lp = 0.65 * lp + 0.35 * w;
-        ch[i] = (body + lp * 0.3) * env * 0.28;
+        hpOut = 0.82 * (hpOut + w - hpPrev);
+        hpPrev = w;
+        const mech =
+          Math.sin(2 * Math.PI * 520 * t * Math.exp(-t * 45)) * 0.38 +
+          Math.sin(2 * Math.PI * 2150 * t) * 0.22;
+        ch[i] = (hpOut * 0.72 + mech) * snap * win * 0.55;
       }
       this.valveClickBuf = buf;
     }
 
-    // 2. Smooth pressurized air exhaust dump ("псссш" — warm shaped air flow, seamless loop)
+    // 2. Open-air exhaust dump ("ПШШШШШЬ!") — turbulent pink/air blast + decompression body
+    {
+      const len = Math.floor(sr * 1.8);
+      const buf = ctx.createBuffer(1, len, sr);
+      const ch = buf.getChannelData(0);
+      // 3-stage Paul Kellet pink-air filter + subtle turbulence flutter
+      let b0 = 0;
+      let b1 = 0;
+      let b2 = 0;
+      let b3 = 0;
+      let hpX = 0;
+      let hpY = 0;
+      for (let i = 0; i < len; i++) {
+        const w = Math.random() * 2 - 1;
+        b0 = 0.997 * b0 + w * 0.029;
+        b1 = 0.985 * b1 + w * 0.032;
+        b2 = 0.950 * b2 + w * 0.048;
+        b3 = 0.820 * b3 + w * 0.145;
+        const pink = b0 + b1 + b2 + b3 + w * 0.14;
+        // High-pass above ~180 Hz so sub rumble doesn't mud up the exhaust hiss
+        hpY = 0.975 * (hpY + pink - hpX);
+        hpX = pink;
+        const t = i / sr;
+        const turb = 0.92 + 0.08 * Math.sin(2 * Math.PI * 23 * t + 0.6 * Math.sin(2 * Math.PI * 6.5 * t));
+        ch[i] = Math.tanh(hpY * 0.62) * turb * 0.88;
+      }
+      const xf = Math.floor(sr * 0.08);
+      for (let i = 0; i < xf; i++) {
+        const a = Math.sin((i / xf) * Math.PI * 0.5);
+        const b = Math.cos((i / xf) * Math.PI * 0.5);
+        const tailIdx = len - xf + i;
+        ch[tailIdx] = ch[tailIdx] * b + ch[i] * a;
+      }
+      this.dumpBuf = buf;
+    }
+
+    // 3. Enclosed bag inflation ("ПОДНЯТЬ") — tight manifold pressure hiss + warm rubber bag tension
     {
       const len = Math.floor(sr * 1.6);
       const buf = ctx.createBuffer(1, len, sr);
       const ch = buf.getChannelData(0);
       let lp1 = 0;
       let lp2 = 0;
+      let lp3 = 0;
       for (let i = 0; i < len; i++) {
+        const t = i / sr;
         const w = Math.random() * 2 - 1;
         lp1 = 0.72 * lp1 + 0.28 * w;
-        lp2 = 0.88 * lp2 + 0.12 * w;
-        const shaped = lp1 - lp2 * 0.55;
-        const flutter = 0.93 + 0.07 * Math.sin(2 * Math.PI * 26 * (i / sr));
-        ch[i] = Math.tanh(shaped * 0.9) * flutter * 0.45;
+        lp2 = 0.90 * lp2 + 0.10 * w;
+        lp3 = 0.986 * lp3 + 0.014 * w;
+        const manifoldHiss = (lp1 - lp2 * 0.68) * 0.95;
+        const bagFlow = lp3 * 0.65 * (0.9 + 0.1 * Math.sin(2 * Math.PI * 14 * t));
+        ch[i] = Math.tanh((manifoldHiss + bagFlow) * 1.15) * 0.72;
       }
-      const xf = Math.floor(sr * 0.06);
+      const xf = Math.floor(sr * 0.07);
       for (let i = 0; i < xf; i++) {
-        const alpha = i / xf;
+        const a = Math.sin((i / xf) * Math.PI * 0.5);
+        const b = Math.cos((i / xf) * Math.PI * 0.5);
         const tailIdx = len - xf + i;
-        ch[tailIdx] = ch[tailIdx] * (1 - alpha) + ch[i] * alpha;
-      }
-      this.dumpBuf = buf;
-    }
-
-    // 3. Soft enclosed manifold air-in fill rush
-    {
-      const len = Math.floor(sr * 1.4);
-      const buf = ctx.createBuffer(1, len, sr);
-      const ch = buf.getChannelData(0);
-      let b0 = 0;
-      let b1 = 0;
-      for (let i = 0; i < len; i++) {
-        const w = Math.random() * 2 - 1;
-        b0 = 0.78 * b0 + 0.22 * w;
-        b1 = 0.92 * b1 + 0.08 * w;
-        ch[i] = (b0 - b1 * 0.5) * 0.36;
-      }
-      const xf = Math.floor(sr * 0.05);
-      for (let i = 0; i < xf; i++) {
-        const alpha = i / xf;
-        const tailIdx = len - xf + i;
-        ch[tailIdx] = ch[tailIdx] * (1 - alpha) + ch[i] * alpha;
+        ch[tailIdx] = ch[tailIdx] * b + ch[i] * a;
       }
       this.fillBuf = buf;
     }
 
-    // 4. Quiet low-frequency damped twin-piston air compressor purr (~8.5 Hz stroke, soft rounded rumble)
+    // 4. Real 12V Berkut / Viair piston compressor (1290 RPM = 21.5 Hz cranking pulse + DC motor hum)
     {
       const dur = 1.0;
       const len = Math.floor(sr * dur);
       const buf = ctx.createBuffer(1, len, sr);
       const ch = buf.getChannelData(0);
-      const strokeHz = 9;
+      const strokeHz = 22.0; // integer cycles per 1.0s for seamless loop!
+      const motorHz = 154.0; // integer cycles per 1.0s
       let lp = 0;
+      let bp = 0;
       for (let i = 0; i < len; i++) {
         const t = i / sr;
         const ph = (t * strokeHz) % 1;
-        const pulse = Math.pow(Math.max(0, Math.sin(ph * Math.PI)), 1.6) * Math.exp(-ph * 2.1);
-        const lowThump =
-          Math.sin(2 * Math.PI * 72 * t) * 0.48 +
-          Math.sin(2 * Math.PI * 144 * t) * 0.18;
+        // Piston compression knock + intake puff
+        const strokeEnv = Math.exp(-ph * 4.5);
+        const intakePuff = Math.sin(Math.PI * Math.min(1, ph * 1.4));
+        const motor =
+          Math.sin(2 * Math.PI * motorHz * t) * 0.36 +
+          Math.sin(2 * Math.PI * (motorHz * 2) * t) * 0.16 +
+          Math.sin(2 * Math.PI * (motorHz * 3) * t) * 0.07;
+        const knock = Math.sin(2 * Math.PI * 88 * t) * strokeEnv * 0.42;
         const w = Math.random() * 2 - 1;
-        lp = 0.90 * lp + 0.10 * w;
-        ch[i] = (lowThump * (0.42 + 0.58 * pulse) + lp * (0.22 + 0.35 * pulse)) * 0.26;
+        lp = 0.84 * lp + 0.16 * w;
+        bp = 0.72 * bp + 0.28 * (w - lp);
+        const mechAir = (lp * 0.36 + bp * 0.24) * (0.35 + 0.65 * intakePuff);
+        ch[i] = Math.tanh((motor * (0.62 + 0.38 * intakePuff) + knock + mechAir) * 1.05) * 0.48;
       }
       this.compBuf = buf;
     }
   }
 
-  public playValveClick(strong = false) {
-    if (!this.ctx || !this.dest || !this.valveClickBuf) return;
-    const src = this.ctx.createBufferSource();
+  private fireClickOn(ctx: AudioContext, dest: AudioNode, strong = false) {
+    if (!this.valveClickBuf) return;
+    const src = ctx.createBufferSource();
     src.buffer = this.valveClickBuf;
-    const g = this.ctx.createGain();
-    g.gain.value = strong ? 0.22 : 0.14;
+    const g = ctx.createGain();
+    g.gain.value = strong ? 0.68 : 0.46;
     src.connect(g);
-    g.connect(this.dest);
+    g.connect(dest);
     src.start();
   }
 
-  public async startAir(kind: 'fill' | 'dump'): Promise<void> {
-    const token = ++this.airReqToken;
+  public async playValveClick(strong = false): Promise<void> {
+    const syncBus = this.getReadySync();
+    if (syncBus) {
+      this.fireClickOn(syncBus.ctx, syncBus.dest, strong);
+      return;
+    }
     const bus = await this.ensureReady();
+    if (bus) {
+      this.fireClickOn(bus.ctx, bus.dest, strong);
+    }
+  }
+
+  public async playLimitStop(dir: 'up' | 'down'): Promise<void> {
+    const bus = this.getReadySync() ?? (await this.ensureReady());
+    if (!bus) return;
+    const { ctx, dest } = bus;
+    this.fireClickOn(ctx, dest, true);
+    const buf = dir === 'down' ? this.dumpBuf : this.fillBuf;
+    if (!buf) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = dir === 'down' ? 1450 : 2100;
+    filter.Q.value = 1.1;
+    const g = ctx.createGain();
+    const now = ctx.currentTime;
+    g.gain.setValueAtTime(0.001, now);
+    g.gain.linearRampToValueAtTime(0.24, now + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.085);
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(dest);
+    src.start(now);
+    src.stop(now + 0.1);
+  }
+
+  // Crisp governor unloader sneeze ("ЦС-ПШИК!") when compressor hits pressure / switches off
+  public async playGovernorUnload(): Promise<void> {
+    const bus = this.getReadySync() ?? (await this.ensureReady());
+    if (!bus || !this.dumpBuf) return;
+    const { ctx, dest } = bus;
+    this.fireClickOn(ctx, dest, true);
+
+    const src = ctx.createBufferSource();
+    src.buffer = this.dumpBuf;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(3400, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(1250, ctx.currentTime + 0.22);
+    filter.Q.value = 0.78;
+
+    const g = ctx.createGain();
+    const now = ctx.currentTime;
+    g.gain.setValueAtTime(0.001, now);
+    g.gain.linearRampToValueAtTime(0.76, now + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(dest);
+    src.start(now);
+    src.stop(now + 0.27);
+  }
+
+  private clearStopTimers() {
+    if (this.stopDelayTimer !== null) {
+      window.clearTimeout(this.stopDelayTimer);
+      this.stopDelayTimer = null;
+    }
+    if (this.burstTimer !== null) {
+      window.clearTimeout(this.burstTimer);
+      this.burstTimer = null;
+    }
+  }
+
+  public async startAir(kind: 'fill' | 'dump', forceRestart = false): Promise<void> {
+    this.clearStopTimers();
+    const token = ++this.airReqToken;
+    const bus = this.getReadySync() ?? (await this.ensureReady());
     if (!bus || token !== this.airReqToken) return;
-    if (this.activeAirKind === kind && this.activeAirNode) return;
+    if (!forceRestart && this.activeAirKind === kind && this.activeAirNode) return;
 
     this.stopAirInternal(false);
     const { ctx, dest } = bus;
     const buf = kind === 'dump' ? this.dumpBuf : this.fillBuf;
     if (!buf) return;
 
-    this.playValveClick(true);
+    // 1. Crisp valve solenoid open clack
+    this.fireClickOn(ctx, dest, true);
 
+    // 2. Main air stream
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.loop = true;
 
+    const now = ctx.currentTime;
     const filter = ctx.createBiquadFilter();
+    const shelf = ctx.createBiquadFilter();
+
     if (kind === 'dump') {
-      filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(2200, ctx.currentTime);
-      filter.frequency.exponentialRampToValueAtTime(1250, ctx.currentTime + 0.35);
-      filter.Q.value = 0.78;
+      // Real open-air exhaust blast: bright initial burst sweeping down into rich wide air roar
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(5200, now);
+      filter.frequency.exponentialRampToValueAtTime(2400, now + 0.28);
+      filter.Q.value = 0.65;
+
+      shelf.type = 'highpass';
+      shelf.frequency.value = 340;
+      shelf.Q.value = 0.7;
     } else {
+      // Enclosed bag fill: muffled pressurized manifold rush (clearly distinct from open dump)
       filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(1450, ctx.currentTime);
-      filter.Q.value = 0.95;
+      filter.frequency.setValueAtTime(1450, now);
+      filter.frequency.exponentialRampToValueAtTime(2250, now + 0.4);
+      filter.Q.value = 1.25;
+
+      shelf.type = 'lowshelf';
+      shelf.frequency.value = 260;
+      shelf.gain.value = 3.5;
     }
 
     const gain = ctx.createGain();
-    const now = ctx.currentTime;
-    const targetGain = kind === 'dump' ? 0.24 : 0.14;
+    const peakGain = kind === 'dump' ? 0.84 : 0.44;
+    const sustainGain = kind === 'dump' ? 0.68 : 0.36;
     gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(kind === 'dump' ? 0.28 : targetGain, now + 0.025);
-    if (kind === 'dump') {
-      gain.gain.exponentialRampToValueAtTime(targetGain, now + 0.22);
-    }
+    gain.gain.linearRampToValueAtTime(peakGain, now + 0.016);
+    gain.gain.exponentialRampToValueAtTime(sustainGain, now + 0.22);
 
     src.connect(filter);
-    filter.connect(gain);
+    filter.connect(shelf);
+    shelf.connect(gain);
     gain.connect(dest);
     src.start(now);
 
     this.activeAirNode = { src, gain };
     this.activeAirKind = kind;
+    this.airStartAt = performance.now();
   }
 
-  public stopAir(): void {
+  public stopAir(respectMinPulse = true): void {
+    this.clearStopTimers();
+    if (respectMinPulse && this.activeAirNode) {
+      const elapsed = performance.now() - this.airStartAt;
+      const minMs = 130;
+      if (elapsed < minMs) {
+        const token = this.airReqToken;
+        this.stopDelayTimer = window.setTimeout(() => {
+          this.stopDelayTimer = null;
+          if (this.airReqToken === token) {
+            this.airReqToken++;
+            this.stopAirInternal(true);
+          }
+        }, minMs - elapsed);
+        return;
+      }
+    }
     this.airReqToken++;
     this.stopAirInternal(true);
   }
@@ -199,24 +356,39 @@ export class PneumoAudioEngine {
     try {
       gain.gain.cancelScheduledValues(now);
       gain.gain.setValueAtTime(gain.gain.value, now);
-      gain.gain.linearRampToValueAtTime(0.0001, now + 0.065);
-      src.stop(now + 0.075);
+      gain.gain.linearRampToValueAtTime(0.0001, now + 0.055);
+      src.stop(now + 0.065);
     } catch {
       // Ignore already stopped
     }
-    if (withClick) {
-      this.playValveClick(false);
+    if (withClick && this.dest) {
+      this.fireClickOn(this.ctx, this.dest, false);
     }
   }
 
-  public async playPresetTransition(direction: 'up' | 'down', durationMs = 650): Promise<void> {
-    await this.startAir(direction === 'down' ? 'dump' : 'fill');
-    window.setTimeout(() => {
-      this.stopAir();
+  public async playPresetTransition(direction: 'up' | 'down', durationMs = 620): Promise<void> {
+    await this.startAir(direction === 'down' ? 'dump' : 'fill', true);
+    const token = this.airReqToken;
+    this.burstTimer = window.setTimeout(() => {
+      this.burstTimer = null;
+      if (this.airReqToken === token) {
+        this.stopAir(false);
+      }
     }, durationMs);
   }
 
-  public async setCompressorSound(on: boolean): Promise<void> {
+  public async playQuickBurst(kind: 'fill' | 'dump' = 'dump', durationMs = 340): Promise<void> {
+    await this.startAir(kind, true);
+    const token = this.airReqToken;
+    this.burstTimer = window.setTimeout(() => {
+      this.burstTimer = null;
+      if (this.airReqToken === token) {
+        this.stopAir(false);
+      }
+    }, durationMs);
+  }
+
+  public async setCompressorSound(on: boolean, withUnload = false): Promise<void> {
     if (!on) {
       if (this.compNode && this.ctx) {
         const { src, gain } = this.compNode;
@@ -225,33 +397,38 @@ export class PneumoAudioEngine {
         try {
           gain.gain.cancelScheduledValues(now);
           gain.gain.setValueAtTime(gain.gain.value, now);
-          gain.gain.linearRampToValueAtTime(0.0001, now + 0.14);
-          src.stop(now + 0.16);
+          gain.gain.linearRampToValueAtTime(0.0001, now + 0.12);
+          src.stop(now + 0.14);
         } catch {
           // Ignore
         }
-        this.playValveClick(false);
+        if (withUnload) {
+          void this.playGovernorUnload();
+        } else {
+          void this.playValveClick(false);
+        }
       }
       return;
     }
 
-    const bus = await this.ensureReady();
+    const bus = this.getReadySync() ?? (await this.ensureReady());
     if (!bus || !this.compBuf || this.compNode) return;
     const { ctx, dest } = bus;
 
-    this.playValveClick(true);
+    this.fireClickOn(ctx, dest, true);
     const src = ctx.createBufferSource();
     src.buffer = this.compBuf;
     src.loop = true;
 
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = 520;
+    lp.frequency.value = 780;
+    lp.Q.value = 0.8;
 
     const gain = ctx.createGain();
     const now = ctx.currentTime;
     gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(0.18, now + 0.16);
+    gain.gain.linearRampToValueAtTime(0.42, now + 0.14);
 
     src.connect(lp);
     lp.connect(gain);
@@ -262,7 +439,9 @@ export class PneumoAudioEngine {
   }
 
   public stopAll(): void {
+    this.clearStopTimers();
+    this.airReqToken++;
     this.stopAirInternal(false);
-    void this.setCompressorSound(false);
+    void this.setCompressorSound(false, false);
   }
 }

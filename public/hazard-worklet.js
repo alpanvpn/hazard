@@ -1,56 +1,161 @@
 (function (root) {
   'use strict';
 
-  // Exact Premier Hazard 7007 & K-13 HILO / MANUAL / SHORT sweep curves (rendered with real recorded tone.wav!)
+  // Premier Hazard 7007 (classic) & K-13 sweep curves
   const PAT = {
-    wail:   { lo: 520, hi: 1800, up: 4.50,  down: 4.10,  smooth: 0.045,  a: 505, b: 1820 },
-    yelp:   { lo: 540, hi: 1780, up: 0.162, down: 0.168, smooth: 0.004,  a: 520, b: 1805 },
+    wail:   { lo: 520, hi: 1790, up: 4.30,  down: 4.00,  smooth: 0.052 },
+    yelp:   { lo: 540, hi: 1780, up: 0.162, down: 0.168, smooth: 0.004 },
     hilo:   { hi: 1095, lo: 665, half: 0.545, smooth: 0.003 },
-    phaser: { lo: 710, hi: 1690, up: 0.025, down: 0.027, smooth: 0.0018, a: 690, b: 1710 },
+    phaser: { lo: 710, hi: 1690, up: 0.025, down: 0.027, smooth: 0.0018 },
+    melody: { lo: 600, hi: 1200, smooth: 0.006 },
   };
 
-  // T: 0=OFF, 1=WAIL, 2=YELP, 3=HILO, 4=PULSAR
+  // Hazard 7007 Silver exponential SGU sweep specs (organic musical curves, not robotic linear ramps)
+  const SILVER_PAT = {
+    wail:   { lo: 516, hi: 1765, up: 3.70,  down: 3.85,  smooth: 0.050 },
+    yelp:   { lo: 525, hi: 1765, up: 0.166, down: 0.170, smooth: 0.0032 },
+    hilo:   { hi: 1100, lo: 670, half: 0.545, smooth: 0.0028 },
+    phaser: { lo: 710, hi: 1710, up: 0.026, down: 0.028, smooth: 0.0018 },
+    melody: { lo: 600, hi: 1200, smooth: 0.006 },
+  };
+
+  // K-13 sweep curves
+  const K13_PAT = {
+    wail:   { lo: 450, hi: 1810, up: 3.55,  down: 3.60,  smooth: 0.044 },
+    yelp:   { lo: 495, hi: 1790, up: 0.155, down: 0.165, smooth: 0.0038 },
+    hilo:   { hi: 1085, lo: 685, half: 0.520, smooth: 0.003 },
+    phaser: { lo: 760, hi: 1680, up: 0.024, down: 0.026, smooth: 0.0018 },
+    melody: { lo: 600, hi: 1200, smooth: 0.006 },
+  };
+
+  const DEFAULT_MELODY_NOTES = [600, 800, 600, 1200];
+  const DEFAULT_MELODY_STEP_DUR = 0.17;
+
   const TONE_PAT = {
     1: 'wail',
     2: 'yelp',
     3: 'hilo',
     4: 'phaser',
+    5: 'melody',
   };
 
-  // Manual sweep parameters matching Video 1 (0:00, 0:04, 0:39-0:41):
-  // - 1st MAN hold ramps up 520 -> 1805 Hz; release coasts down smoothly
-  // - 2nd MAN press while coasting down above 720 Hz catches into PULSAR, stopping cleanly on release
-  const MAN = { start: 520, max: 1805, rise: 660, tau: 1.45, cut: 295, burst: 720 };
+  // MAN sweep (standard 600 <-> 1700 Hz manual siren curve)
+  const MAN = { lo: 600, hi: 1700, up: 3.00, down: 3.10, resetPause: 1.35 };
 
-  // Emergency fallback wavetable ONLY for the first ~20ms before WAV buffers finish decoding
+  // Rich 100W Under-Hood SGU Compression-Horn Driver Wavetable
+  // Authentic brassy compression-horn harmonic balance (not a thin pure sine wave)
   const TABLE_SIZE = 4096;
   const WAVE = new Float32Array(TABLE_SIZE);
   {
-    let peak = 0;
+    let p1 = 0;
     for (let i = 0; i < TABLE_SIZE; i++) {
       const th = (2 * Math.PI * i) / TABLE_SIZE;
-      const v =
-        1.000 * Math.sin(th) +
-        0.015 * Math.sin(2 * th) +
-        0.042 * Math.sin(3 * th) +
-        0.010 * Math.sin(5 * th);
-      WAVE[i] = v;
-      if (Math.abs(v) > peak) peak = Math.abs(v);
+      const v1 =
+        1.00 * Math.sin(th) +
+        0.24 * Math.sin(2 * th + 0.15) +
+        0.34 * Math.sin(3 * th) +
+        0.13 * Math.sin(4 * th + 0.30) +
+        0.18 * Math.sin(5 * th) +
+        0.07 * Math.sin(6 * th + 0.20) +
+        0.09 * Math.sin(7 * th) +
+        0.04 * Math.sin(8 * th);
+      WAVE[i] = v1;
+      if (Math.abs(v1) > p1) p1 = Math.abs(v1);
     }
-    const norm = peak > 0 ? 0.86 / peak : 1;
-    for (let i = 0; i < TABLE_SIZE; i++) WAVE[i] *= norm;
+    for (let i = 0; i < TABLE_SIZE; i++) {
+      WAVE[i] *= p1 > 0 ? 0.86 / p1 : 1;
+    }
   }
 
-  function readWave(phase01) {
+  // Zero-hiss Premier Hazard 7007 Air Horn wavetable (exact Fourier spectrum measured from real 54.44 Hz horn.wav)
+  const HORN_BASE_HZ = 54.44;
+  const HORN_WAVE = new Float32Array(TABLE_SIZE);
+  {
+    const harmonics = [
+      [7, 0.0504, -0.587],
+      [11, 0.0519, -2.130],
+      [12, 0.2231, -2.804],
+      [13, 0.2217, -0.601],
+      [14, 0.1995, -1.353],
+      [15, 0.0632, 0.830],
+      [16, 0.4330, 0.971],
+      [17, 0.1986, 1.479],
+      [18, 0.0430, -2.031],
+      [19, 0.0910, 0.036],
+      [21, 0.0774, 2.082],
+      [22, 0.1148, -1.589],
+      [23, 0.1463, 2.116],
+      [24, 0.0214, -2.765],
+      [25, 0.0892, 1.937],
+      [26, 0.2431, 0.257],
+      [27, 0.0206, 1.289],
+      [28, 0.0278, -1.316],
+      [29, 0.1062, 0.278],
+      [30, 0.0958, -1.668],
+      [31, 0.0835, 1.852],
+      [32, 0.0396, 2.022],
+      [33, 0.0241, 0.651],
+    ];
+    let hp = 0;
+    for (let i = 0; i < TABLE_SIZE; i++) {
+      const base = (2 * Math.PI * i) / TABLE_SIZE;
+      let v = 0;
+      for (let h = 0; h < harmonics.length; h++) {
+        const [k, mag, ph] = harmonics[h];
+        v += mag * Math.cos(k * base + ph);
+      }
+      HORN_WAVE[i] = v;
+      if (Math.abs(v) > hp) hp = Math.abs(v);
+    }
+    for (let i = 0; i < TABLE_SIZE; i++) {
+      HORN_WAVE[i] *= hp > 0 ? 0.92 / hp : 1;
+    }
+  }
+
+  // Genuine K-13 Air Horn harmonic spectrum measured from real K-13 video (92.5 Hz fundamental)
+  const K13_HORN_BASE_HZ = 92.5;
+  const K13_HORN_WAVE = new Float32Array(TABLE_SIZE);
+  {
+    const harmonics = [
+      [1, 0.34, 0.0],
+      [2, 0.21, 0.4],
+      [3, 0.20, -0.7],
+      [4, 0.19, 1.1],
+      [5, 0.21, -0.3],
+      [6, 0.14, 0.9],
+      [7, 0.08, -1.2],
+      [8, 0.09, 0.6],
+      [9, 0.16, -0.4],
+      [10, 0.50, 0.2],
+      [11, 0.14, -1.1],
+      [12, 0.08, 0.8],
+    ];
+    let kp = 0;
+    for (let i = 0; i < TABLE_SIZE; i++) {
+      const base = (2 * Math.PI * i) / TABLE_SIZE;
+      let v = 0;
+      for (let h = 0; h < harmonics.length; h++) {
+        const [k, mag, ph] = harmonics[h];
+        v += mag * Math.cos(k * base + ph);
+      }
+      K13_HORN_WAVE[i] = v;
+      if (Math.abs(v) > kp) kp = Math.abs(v);
+    }
+    for (let i = 0; i < TABLE_SIZE; i++) {
+      K13_HORN_WAVE[i] *= kp > 0 ? 0.92 / kp : 1;
+    }
+  }
+
+  function readTbl(tbl, phase01) {
     const p = (phase01 - Math.floor(phase01)) * TABLE_SIZE;
     const i0 = p | 0;
     const i1 = (i0 + 1) & (TABLE_SIZE - 1);
     const fr = p - i0;
-    return WAVE[i0] + (WAVE[i1] - WAVE[i0]) * fr;
+    return tbl[i0] + (tbl[i1] - tbl[i0]) * fr;
   }
 
-  function readLinear(pcm, pos) {
-    const len = pcm.length;
+  function readLinear(pcm, pos, le) {
+    const len = le > 0 && le <= pcm.length ? le : pcm.length;
     if (len === 0) return 0;
     const i = pos | 0;
     if (i < 0) return pcm[0];
@@ -61,36 +166,71 @@
     return a + (b - a) * fr;
   }
 
-  // Seamless cosine crossfade loop reader (zero wrap click/pop on real recordings & tone cycles)
-  function readSeamless(pcm, pos, ls, maxXf) {
-    const len = pcm.length;
+  function getLoopXf(ls, le, maxXf) {
+    const loopLen = Math.max(0, le - ls);
+    const xf = Math.min(Math.floor(loopLen / 3), maxXf || 700);
+    return xf > 16 && loopLen > xf * 2 ? xf : 0;
+  }
+
+  function readSeamless(pcm, pos, ls, le, maxXf) {
+    const len = le > 0 && le <= pcm.length ? le : pcm.length;
     if (len === 0) return 0;
-    const loopLen = Math.max(64, len - ls);
-    const xf = Math.min(loopLen >> 2, maxXf || 700);
-    const s1 = readLinear(pcm, pos);
+    const xf = getLoopXf(ls, len, maxXf);
+    const s1 = readLinear(pcm, pos, len);
     const distToEnd = len - pos;
-    if (xf > 16 && distToEnd < xf && pos >= ls) {
+    if (xf > 0 && distToEnd < xf && pos >= ls) {
       const t = 1 - distToEnd / xf;
       const w1 = Math.cos(t * Math.PI * 0.5);
       const w2 = Math.sin(t * Math.PI * 0.5);
       const wrapPos = ls + (xf - distToEnd);
-      const s2 = readLinear(pcm, wrapPos);
+      const s2 = readLinear(pcm, wrapPos, len);
       return s1 * w1 + s2 * w2;
     }
     return s1;
   }
 
+  function advanceLoop(pos, step, ls, le, maxXf) {
+    const len = le;
+    const xf = getLoopXf(ls, len, maxXf);
+    const wrapBase = ls + xf;
+    const span = Math.max(1, len - wrapBase);
+    let next = pos + step;
+    if (next >= len) {
+      next = wrapBase + ((next - len) % span);
+    }
+    return next;
+  }
+
   class HazardSynth {
     constructor(sr) {
       this.sr = sr;
-      this.s = { power: false, tone: 0, man: 'off', manHeld: false, horn: false, mute: false };
+      this.s = {
+        power: false,
+        tone: 0,
+        selectedTone: 1,
+        man: 'off',
+        manHeld: false,
+        horn: false,
+        mute: false,
+      };
       this.sgu = 'hazard';
+      this.silverOpts = {
+        speaker: 'hazard',
+        analog: false,
+        powerLevel: 72,
+      };
       this.rec = {};
-      this.packRec = { elina: {}, grach: {} };
+      this.packRec = { elina: {}, grach: {}, k13: {} };
 
       this.ph = 0;
+      this.hornPh = 0;
+      this.hornModPh = 0;
+      this.hornTapT = 0;
+      this.hornStepIdx = 0;
+      this.driftT = 0;
       this.tonePos = 0;
       this.recPos = 0;
+      this.shortPos = -1;
       this.f = 0;
       this.tf = 0;
       this.f1 = 0;
@@ -99,7 +239,14 @@
       this.pat = null;
       this.patName = '';
       this.hiloT = 0;
+      this.melodyT = 0;
+      this.melodyNotes = DEFAULT_MELODY_NOTES.slice();
+      this.melodyStepDur = DEFAULT_MELODY_STEP_DUR;
+      this.melodySharp = false;
+      this.melodyIsSweep = true;
       this.mf = 0;
+      this.manDir = 1;
+      this.manIdleT = 99;
       this.trill = false;
       this.amp = 0;
       this.wasFalling = false;
@@ -107,11 +254,21 @@
       this.shortT = -1;
       this.cutFade = false;
 
-      // Exclusive non-overlapping active source key ('', 'wail', 'yelp', 'hilo', 'phaser', 'manual', 'short')
       this.curSrcKey = '';
+      this._specKind = '';
+      this._specEntry = null;
+      this._specXf = 0;
+      this._specResolvedKey = '';
+      this._specResolvedSgu = '';
       this.zcEstHz = 0;
       this.zcLastSign = 0;
       this.zcSince = 0;
+
+      // Horn cabinet acoustic state (320Hz HP + 3500Hz warm LP + horn presence)
+      this.cabHpX = 0;
+      this.cabHpY = 0;
+      this.cabLp1 = 0;
+      this.cabLp2 = 0;
 
       this.hg = 0;
       this.hornWas = false;
@@ -123,15 +280,17 @@
       this.gm = 1;
 
       const k = (sec) => 1 - Math.exp(-1 / (sec * sr));
-      this.kAmp = k(0.004);
-      this.kAmpOff = k(0.012);
-      this.kAmpCut = k(0.007); // crisp ~25ms cutoff for PULSAR release & clean non-overlapping switch
-      this.kFastSwitch = k(0.0025); // ~8ms fast silent handoff between modes so two sirens NEVER collide
-      this.kHornOn = k(0.003);
-      this.kHornOff = k(0.014);
-      this.kHornLp = k(1 / (2 * Math.PI * 5200));
-      this.kMute = k(0.004);
-      this.kMan = k(0.005);
+      this.kAmp = k(0.0032);
+      this.kAmpOff = k(0.009);
+      this.kAmpCut = k(0.006);
+      this.kFastSwitch = k(0.0032);
+      this.kHornOn = k(0.0018);
+      this.kHornOff = k(0.0042);
+      this.kHornLp = k(1 / (2 * Math.PI * 3600));
+      this.kCabHp = Math.exp((-2 * Math.PI * 300) / sr);
+      this.kCabLp = k(1 / (2 * Math.PI * 3500));
+      this.kMute = k(0.0045);
+      this.kMan = k(0.0032);
 
       this.statN = 0;
       this.statPeak = 0;
@@ -147,16 +306,49 @@
       if (m.type === 'state') {
         Object.assign(this.s, m.s);
       } else if (m.type === 'sgu') {
-        const next = m.id === 'k13' || m.id === 'elina' || m.id === 'grach' ? m.id : 'hazard';
+        const next =
+          m.id === 'k13' || m.id === 'elina' || m.id === 'grach' || m.id === 'hazard_silver'
+            ? m.id
+            : 'hazard';
         if (next !== this.sgu) {
           this.sgu = next;
           this.reset();
         }
+      } else if (m.type === 'silverOpts') {
+        if (m.speaker) this.silverOpts.speaker = 'hazard';
+        if (typeof m.analog === 'boolean') this.silverOpts.analog = m.analog;
+        if (typeof m.powerLevel === 'number') this.silverOpts.powerLevel = m.powerLevel;
+      } else if (m.type === 'melodyConfig') {
+        if (Array.isArray(m.notes) && m.notes.length >= 2) {
+          const clean = [];
+          for (let i = 0; i < Math.min(12, m.notes.length); i++) {
+            const v = Number(m.notes[i]);
+            if (Number.isFinite(v)) clean.push(Math.max(200, Math.min(2600, v)));
+          }
+          if (clean.length >= 2) this.melodyNotes = clean;
+        }
+        if (typeof m.stepMs === 'number' && Number.isFinite(m.stepMs)) {
+          this.melodyStepDur = Math.max(0.06, Math.min(1.5, m.stepMs / 1000));
+        }
+        if (typeof m.sharp === 'boolean') {
+          this.melodySharp = m.sharp;
+        }
+        if (typeof m.isSweep === 'boolean') {
+          this.melodyIsSweep = m.isSweep;
+        }
+        if (this.patName === 'melody' || (this.s.manHeld && !this.melodyIsSweep)) {
+          this.melodyT = 0;
+        }
+      } else if (m.type === 'hornTap') {
+        this.hornTapT = 0;
+        this.hornStepIdx = (this.hornStepIdx + 1) % 64;
+        this.hornPos = 0;
       } else if (m.type === 'sample') {
         this.rec[m.name] = {
           pcm: m.pcm,
           ls: Math.round((m.loopStart || 0) * this.sr),
-          hz: m.hz && m.hz > 20 ? m.hz : 904.4,
+          le: m.loopEnd ? Math.round(m.loopEnd * this.sr) : m.pcm.length,
+          hz: m.hz && m.hz > 20 ? m.hz : 900.0,
           track: Array.isArray(m.track) ? m.track : null,
           step: m.step || 0.02,
         };
@@ -180,6 +372,7 @@
         this.wolfPos = -1;
       } else if (m.type === 'short') {
         this.shortT = 0;
+        this.shortPos = 0;
       } else if (m.type === 'reset') {
         this.reset();
       }
@@ -188,25 +381,52 @@
     reset() {
       this.mode = 'idle';
       this.mf = 0;
+      this.manDir = 1;
+      this.manIdleT = 99;
       this.trill = false;
       this.wasFalling = false;
       this.manWasHeld = false;
       this.wolfPos = -1;
       this.shortT = -1;
+      this.shortPos = -1;
       this.cutFade = false;
       this.curSrcKey = '';
+      this._specKind = '';
+      this._specEntry = null;
+      this._specResolvedKey = '';
       this.recPos = 0;
       this.tonePos = 0;
       this.hornWas = false;
       this.hornPos = 0;
+      this.hornPh = 0;
+      this.hornModPh = 0;
+      this.hornTapT = 0;
+      this.hiloT = 0;
+      this.melodyT = 0;
+      this.cabHpX = 0;
+      this.cabHpY = 0;
+      this.cabLp1 = 0;
+      this.cabLp2 = 0;
+    }
+
+    getPatTable() {
+      if (this.sgu === 'hazard_silver') return SILVER_PAT;
+      if (this.sgu === 'k13') return K13_PAT;
+      return PAT;
     }
 
     enterPat(name, fromSilence) {
-      const p = PAT[name] || PAT.wail;
+      const tbl = this.getPatTable();
+      const p = tbl[name] || tbl.wail;
       this.pat = p;
       this.patName = name;
       this.cutFade = false;
-      if (name === 'hilo') {
+      if (name === 'melody') {
+        this.melodyT = 0;
+        const firstHz = (this.melodyNotes && this.melodyNotes[0]) || 600;
+        this.tf = firstHz;
+        if (fromSilence) this.f = this.f1 = firstHz;
+      } else if (name === 'hilo') {
         this.hiloT = 0;
         this.tf = p.hi;
         if (fromSilence) this.f = this.f1 = p.hi;
@@ -230,19 +450,31 @@
         return 0;
       }
 
-      // K-13 SHORT quick chirp (~0.25s crisp upward chirp)
+      // K-13 SHORT quick single chirp (stops cleanly at 0.095s before 2nd tap in WAV)
       if (this.shortT >= 0) {
-        this.shortT += blockDur;
-        if (this.shortT > 0.25) {
-          this.shortT = -1;
-          this.cutFade = true;
+        const k13Short = this.sgu === 'k13' && this.packRec.k13 && this.packRec.k13.short;
+        const maxShortSamples = k13Short ? Math.min(k13Short.pcm.length, Math.floor(this.sr * 0.095)) : 0;
+        if (k13Short) {
+          if (this.shortPos >= maxShortSamples || this.shortPos < 0) {
+            this.shortT = -1;
+            this.shortPos = -1;
+            this.cutFade = true;
+          } else {
+            this.cutFade = false;
+            return 4;
+          }
         } else {
-          this.cutFade = false;
-          return 4;
+          this.shortT += blockDur;
+          if (this.shortT > 0.24) {
+            this.shortT = -1;
+            this.cutFade = true;
+          } else {
+            this.cutFade = false;
+            return 4;
+          }
         }
       }
 
-      // Active automatic siren pattern (WAIL / YELP / HILO / PULSAR)
       if (s.tone) {
         const name = TONE_PAT[s.tone] || 'wail';
         if (this.mode !== 'pat' || this.patName !== name) {
@@ -255,13 +487,13 @@
         return 1;
       }
 
-      // Dedicated hold-only PULSAR key (K-13 PULSAR button): starts immediately and stops cleanly on release
       if (s.man === 'pulsar') {
         if (s.manHeld) {
           if (!this.trill || this.patName !== 'phaser') {
             this.trill = true;
             this.enterPat('phaser', silent);
-            this.tf = Math.max(PAT.phaser.lo, this.f || PAT.phaser.lo);
+            const pPh = this.getPatTable().phaser;
+            this.tf = Math.max(pPh.lo, this.f || pPh.lo);
             this.dir = 1;
           }
           this.wasFalling = false;
@@ -280,9 +512,6 @@
         return 0;
       }
 
-      // STANDBY / PA / RADIO mode:
-      // - 1st MAN hold smoothly sweeps 520 -> 1805 Hz, release smoothly coasts down
-      // - 2nd MAN press while spinning down above 720 Hz catches into crisp PULSAR, stopping cleanly on release
       if (this.mode === 'pat' && !this.trill) {
         this.mf = silent ? 0 : this.f;
         this.mode = 'manual';
@@ -290,20 +519,31 @@
       if (this.mode === 'idle') this.mode = 'manual';
 
       if ((s.man === 'manual' || s.man === 'pa') && s.manHeld) {
-        if (!this.manWasHeld && this.wasFalling && this.mf >= MAN.burst) {
-          this.trill = true;
-          this.enterPat('phaser', false);
+        if (!this.manWasHeld) {
+          if (this.melodyIsSweep) {
+            if (this.mf < MAN.lo || this.manIdleT > MAN.resetPause) {
+              this.mf = MAN.lo;
+              this.manDir = 1;
+            }
+            this.f = this.mf;
+          } else {
+            if (this.manIdleT > MAN.resetPause) {
+              this.melodyT = 0;
+              const firstHz = (this.melodyNotes && this.melodyNotes[0]) || 600;
+              this.tf = this.f1 = this.f = firstHz;
+            } else if (this.f < 200) {
+              const firstHz = (this.melodyNotes && this.melodyNotes[0]) || 600;
+              this.tf = this.f1 = this.f = firstHz;
+            }
+          }
         }
+        this.manIdleT = 0;
         this.manWasHeld = true;
         this.cutFade = false;
-        if (this.trill) {
-          return 1;
-        }
         this.wasFalling = false;
         return 2;
       }
 
-      // Releasing PULSAR stops cleanly within ~30ms (exact Video 1 0:41 behavior)
       if (this.trill) {
         this.trill = false;
         this.mf = 0;
@@ -314,42 +554,75 @@
         return 0;
       }
 
+      if (this.manWasHeld) {
+        this.cutFade = true;
+      }
       this.manWasHeld = false;
-      this.cutFade = false;
-      this.wasFalling = this.mf > 380;
+      this.manIdleT = Math.min(99, this.manIdleT + blockDur);
       return 3;
     }
 
-    getSampleForKey(key) {
-      if (this.sgu === 'elina' || this.sgu === 'grach') {
+    resolveSampleForKey(key) {
+      if (this._specResolvedKey === key && this._specResolvedSgu === this.sgu) {
+        return;
+      }
+      this._specResolvedKey = key;
+      this._specResolvedSgu = this.sgu;
+      this._specKind = '';
+      this._specEntry = null;
+      this._specXf = 0;
+      if (!key) return;
+
+      // Elina and Grach: kept 100% untouched! (except user-selected 'melody')
+      if ((this.sgu === 'elina' || this.sgu === 'grach') && key !== 'melody') {
         const pack = this.packRec[this.sgu] || {};
-        if (key === 'wail' && pack.wail) return { kind: 'clip', entry: pack.wail, xf: 650 };
-        if (key === 'yelp' && pack.yelp) return { kind: 'clip', entry: pack.yelp, xf: 360 };
+        if (key === 'wail' && pack.wail) { this._specKind = 'clip'; this._specEntry = pack.wail; this._specXf = 650; return; }
+        if (key === 'yelp' && pack.yelp) { this._specKind = 'clip'; this._specEntry = pack.yelp; this._specXf = 360; return; }
         if (key === 'hilo') {
-          if (pack.hilo) return { kind: 'clip', entry: pack.hilo, xf: 300 };
-          if (pack.phaser) return { kind: 'clip', entry: pack.phaser, xf: 300 };
+          if (pack.hilo) { this._specKind = 'clip'; this._specEntry = pack.hilo; this._specXf = 300; return; }
+          if (pack.phaser) { this._specKind = 'clip'; this._specEntry = pack.phaser; this._specXf = 300; return; }
         }
         if (key === 'phaser') {
-          if (pack.phaser) return { kind: 'clip', entry: pack.phaser, xf: 300 };
-          // For Elina (which has no separate phaser WAV), use real Elina tone.wav swept at PULSAR cadence!
-          if (pack.tone) return { kind: 'tone', entry: pack.tone };
+          if (pack.phaser) { this._specKind = 'clip'; this._specEntry = pack.phaser; this._specXf = 300; return; }
+          if (pack.tone) { this._specKind = 'tone'; this._specEntry = pack.tone; return; }
         }
-        if (key === 'manual' || key === 'short') {
-          if (pack.tone) return { kind: 'tone', entry: pack.tone };
+        if ((key === 'manual' || key === 'short') && pack.tone) {
+          this._specKind = 'tone'; this._specEntry = pack.tone; return;
         }
-        if (pack.tone) return { kind: 'tone', entry: pack.tone };
-        return null;
+        if (pack.tone) { this._specKind = 'tone'; this._specEntry = pack.tone; return; }
+        return;
       }
 
-      // Premier Hazard 7007 & K-13: 100% genuine video-extracted recordings!
-      if (key === 'wail' && this.rec.wail) return { kind: 'clip', entry: this.rec.wail, xf: 700 };
-      if (key === 'yelp' && this.rec.yelp) return { kind: 'clip', entry: this.rec.yelp, xf: 320 };
-      if (key === 'phaser' && this.rec.phaser) return { kind: 'clip', entry: this.rec.phaser, xf: 260 };
-      if ((key === 'hilo' || key === 'manual' || key === 'short') && this.rec.tone) {
-        return { kind: 'tone', entry: this.rec.tone };
+      // K-13: genuine recorded K-13 pack WAVs (tone.wav, pulsar.wav, short.wav)
+      if (this.sgu === 'k13') {
+        const kpack = this.packRec.k13 || {};
+        if (key === 'short' && kpack.short) { this._specKind = 'oneshot'; this._specEntry = kpack.short; return; }
+        if (key === 'phaser' && kpack.pulsar) { this._specKind = 'clip'; this._specEntry = kpack.pulsar; this._specXf = 260; return; }
+        if (kpack.tone) { this._specKind = 'tone'; this._specEntry = kpack.tone; return; }
+        this._specKind = 'silver';
+        return;
       }
-      if (this.rec.tone) return { kind: 'tone', entry: this.rec.tone };
-      return null;
+
+      // Premier Hazard 7007 & Silver Hazard: genuine recorded Hazard WAVs (wail, yelp, phaser, tone)
+      if (key === 'wail' && this.rec.wail) { this._specKind = 'clip'; this._specEntry = this.rec.wail; this._specXf = 650; return; }
+      if (key === 'yelp' && this.rec.yelp) { this._specKind = 'clip'; this._specEntry = this.rec.yelp; this._specXf = 360; return; }
+      if (key === 'phaser' && this.rec.phaser) { this._specKind = 'clip'; this._specEntry = this.rec.phaser; this._specXf = 300; return; }
+      if (this.rec.tone) { this._specKind = 'tone'; this._specEntry = this.rec.tone; return; }
+      this._specKind = 'silver';
+    }
+
+    // 100W under-hood SGU horn-bell acoustic cabinet shaping (300Hz HP + warm 3.5kHz LP + driver saturation)
+    applyHornCabinet(raw) {
+      // Gentle high-pass to clear muddy sub rumble
+      this.cabHpY = this.kCabHp * (this.cabHpY + raw - this.cabHpX);
+      this.cabHpX = raw;
+      // Amplifier / horn throat saturation
+      const drive = this.sgu === 'hazard_silver' && this.silverOpts.analog ? 1.56 : 1.24;
+      const sat = Math.tanh(this.cabHpY * drive) * 0.88;
+      // 2-pole warm speaker roll-off above 3.5 kHz (zero harsh digital edge)
+      this.cabLp1 += (sat - this.cabLp1) * this.kCabLp;
+      this.cabLp2 += (this.cabLp1 - this.cabLp2) * this.kCabLp;
+      return this.cabLp2;
     }
 
     render(out) {
@@ -364,69 +637,155 @@
       if (hornT && !this.hornWas) {
         this.hornPos = 0;
         this.hornLp = 0;
+        this.hornTapT = 0;
       }
       this.hornWas = !!hornT;
 
-      // Wolf one-shot NEVER overlaps active siren, manual sweep, or horn
       if (s.tone || hornT || (s.manHeld && s.man !== 'wolf') || !s.power) {
         this.wolfPos = -1;
       }
 
-      // Determine exclusive target source key
       let wantKey = '';
       if (how === 1 && this.patName) {
         wantKey = this.patName;
-      } else if (how === 2 || (how === 3 && this.mf > 0)) {
+      } else if (how === 2) {
         wantKey = 'manual';
       } else if (how === 4) {
         wantKey = 'short';
       }
 
-      const pack = this.sgu === 'elina' || this.sgu === 'grach' ? this.packRec[this.sgu] || {} : null;
+      const pack =
+        this.sgu === 'elina' || this.sgu === 'grach' || this.sgu === 'k13'
+          ? this.packRec[this.sgu] || {}
+          : null;
       const hornEntry = pack && pack.horn ? pack.horn : this.rec.horn || null;
-      const decay = Math.exp(-dt / MAN.tau);
       const ks = how === 1 && this.pat ? 1 - Math.exp(-dt / this.pat.smooth) : 0;
+      const isSilver = this.sgu === 'hazard_silver';
+      const isK13 = this.sgu === 'k13';
+      const silverLevel = isSilver
+        ? this.silverOpts.powerLevel <= 0
+          ? 0
+          : 0.34 + 0.66 * Math.min(1, Math.max(0, this.silverOpts.powerLevel / 100))
+        : 1;
+
+      const k13ShortMax =
+        isK13 && this.packRec.k13 && this.packRec.k13.short
+          ? Math.min(this.packRec.k13.short.pcm.length, Math.floor(sr * 0.095))
+          : 0;
+      const k13ShortFade = Math.floor(sr * 0.008);
+      const kManSmooth = 1 - Math.exp(-dt / 0.006);
 
       let peak = 0;
 
       for (let i = 0; i < n; i++) {
-        // Update frequency curve for tone-driven modes (HILO, MANUAL, SHORT, fallback)
         let activeWant = wantKey;
+        let melAccent = 1;
+
         if (how === 1) {
           const p = this.pat;
-          if (this.patName === 'hilo') {
+          if (this.patName === 'melody') {
+            if (this.melodyIsSweep) {
+              if (this.mf < MAN.lo || this.mf > MAN.hi) this.mf = MAN.lo;
+              if (this.manDir > 0) {
+                this.mf *= Math.pow(MAN.hi / MAN.lo, dt / MAN.up);
+                if (this.mf >= MAN.hi) {
+                  this.mf = MAN.hi;
+                  this.manDir = -1;
+                }
+              } else {
+                this.mf /= Math.pow(MAN.hi / MAN.lo, dt / MAN.down);
+                if (this.mf <= MAN.lo) {
+                  this.mf = MAN.lo;
+                  this.manDir = 1;
+                }
+              }
+              this.tf = this.mf;
+            } else {
+              const notes = this.melodyNotes && this.melodyNotes.length >= 2 ? this.melodyNotes : DEFAULT_MELODY_NOTES;
+              const stepDur = this.melodyStepDur > 0.05 ? this.melodyStepDur : DEFAULT_MELODY_STEP_DUR;
+              const nLen = notes.length;
+              const totalDur = nLen * stepDur;
+              this.melodyT += dt;
+              if (this.melodyT >= totalDur) {
+                this.melodyT -= Math.floor(this.melodyT / totalDur) * totalDur;
+              }
+              const seg = Math.min(nLen - 1, (this.melodyT / stepDur) | 0);
+              const u = (this.melodyT - seg * stepDur) / stepDur;
+              if (this.melodySharp) {
+                this.tf = notes[seg];
+                melAccent = 0.88 + 0.12 * Math.sin(Math.PI * Math.min(1, u * 1.15));
+              } else {
+                const ease = 0.5 - 0.5 * Math.cos(Math.PI * u);
+                const f0 = notes[seg];
+                const f1 = notes[(seg + 1) % nLen];
+                this.tf = f0 * Math.pow(f1 / f0, ease);
+              }
+            }
+          } else if (this.patName === 'hilo') {
             this.hiloT += dt;
             if (this.hiloT >= p.half) {
               this.hiloT -= p.half;
               this.tf = this.tf === p.hi ? p.lo : p.hi;
             }
           } else if (this.dir > 0) {
-            this.tf *= Math.pow(p.b / p.a, dt / p.up);
-            if (this.tf >= p.b || !Number.isFinite(this.tf)) {
-              this.tf = p.b;
+            // Exponential musical pitch curve for all SGU sirens (authentic WAIL / YELP / PHASER)
+            this.tf *= Math.pow(p.hi / p.lo, dt / p.up);
+            if (this.tf >= p.hi || !Number.isFinite(this.tf)) {
+              this.tf = p.hi;
               this.dir = -1;
             }
           } else {
-            this.tf /= Math.pow(p.b / p.a, dt / p.down);
-            if (this.tf <= p.a || !Number.isFinite(this.tf)) {
-              this.tf = p.a;
+            this.tf /= Math.pow(p.hi / p.lo, dt / p.down);
+            if (this.tf <= p.lo || !Number.isFinite(this.tf)) {
+              this.tf = p.lo;
               this.dir = 1;
             }
           }
           this.f1 += (this.tf - this.f1) * ks;
           this.f += (this.f1 - this.f) * ks;
         } else if (how === 2) {
-          if (this.mf < MAN.start) this.mf = MAN.start;
-          const room = Math.max(0.18, Math.min(1, (MAN.max - this.mf) / 160));
-          this.mf = Math.min(MAN.max, this.mf + MAN.rise * dt * room);
-          this.f += (this.mf - this.f) * this.kMan;
-        } else if (how === 3 && this.mf > 0) {
-          this.mf *= decay;
-          this.f += (this.mf - this.f) * this.kMan;
-          if (this.mf < MAN.cut * 0.88) {
-            this.mf = 0;
-            this.wasFalling = false;
-            activeWant = '';
+          if (this.melodyIsSweep) {
+            if (this.manDir > 0) {
+              this.mf *= Math.pow(MAN.hi / MAN.lo, dt / MAN.up);
+              if (this.mf >= MAN.hi) {
+                this.mf = MAN.hi;
+                this.manDir = -1;
+              }
+            } else {
+              this.mf /= Math.pow(MAN.hi / MAN.lo, dt / MAN.down);
+              if (this.mf <= MAN.lo) {
+                this.mf = MAN.lo;
+                this.manDir = 1;
+              }
+            }
+            this.f = this.mf;
+          } else {
+            const notes = this.melodyNotes && this.melodyNotes.length >= 2 ? this.melodyNotes : DEFAULT_MELODY_NOTES;
+            const stepDur = this.melodyStepDur > 0.05 ? this.melodyStepDur : DEFAULT_MELODY_STEP_DUR;
+            const nLen = notes.length;
+            const totalDur = nLen * stepDur;
+            this.melodyT += dt;
+            if (this.melodyT >= totalDur) {
+              this.melodyT -= Math.floor(this.melodyT / totalDur) * totalDur;
+            }
+            const seg = Math.min(nLen - 1, (this.melodyT / stepDur) | 0);
+            const u = (this.melodyT - seg * stepDur) / stepDur;
+            if (this.melodySharp) {
+              this.tf = notes[seg];
+              melAccent = 0.88 + 0.12 * Math.sin(Math.PI * Math.min(1, u * 1.15));
+            } else {
+              const ease = 0.5 - 0.5 * Math.cos(Math.PI * u);
+              const f0 = notes[seg];
+              const f1 = notes[(seg + 1) % nLen];
+              this.tf = f0 * Math.pow(f1 / f0, ease);
+            }
+            this.f1 += (this.tf - this.f1) * kManSmooth;
+            this.f += (this.f1 - this.f) * kManSmooth;
+          }
+        } else if (how === 3) {
+          activeWant = '';
+          if (this.mf > MAN.lo) {
+            this.mf = Math.max(MAN.lo, this.mf * Math.pow(0.92, dt));
           }
         } else if (how === 4) {
           const pNorm = Math.min(1, this.shortT / 0.21);
@@ -435,34 +794,27 @@
 
         if (!Number.isFinite(this.f) || this.f < 0) this.f = 0;
 
-        // Clean non-overlapping switch: fade previous mode cleanly to near-zero BEFORE starting new mode
         let targetAmp = 0;
         let ampRate = this.kAmpOff;
 
         if (activeWant !== this.curSrcKey) {
-          if (this.curSrcKey === '' || this.amp <= 0.015) {
+          if (this.curSrcKey === '' || this.amp <= 0.0006) {
             this.curSrcKey = activeWant;
             this.recPos = 0;
             if (activeWant) {
               targetAmp =
-                how === 3 && this.mf > 0
-                  ? Math.max(0, Math.min(1, (this.mf - MAN.cut) / 190))
-                  : how === 4 && this.shortT >= 0.2
-                  ? Math.max(0, 1 - (this.shortT - 0.2) / 0.05)
+                how === 4 && !k13ShortMax && this.shortT >= 0.19
+                  ? Math.max(0, 1 - (this.shortT - 0.19) / 0.05)
                   : 1;
               ampRate = this.kAmp;
             }
           } else {
-            // Smooth fast ~8ms silence handoff so two modes NEVER sound mixed together
             targetAmp = 0;
             ampRate = this.kFastSwitch;
           }
         } else if (this.curSrcKey !== '') {
-          if (how === 3 && this.mf > 0) {
-            targetAmp = Math.max(0, Math.min(1, (this.mf - MAN.cut) / 190));
-            ampRate = this.kAmpOff;
-          } else if (how === 4) {
-            targetAmp = this.shortT < 0.2 ? 1 : Math.max(0, 1 - (this.shortT - 0.2) / 0.05);
+          if (how === 4) {
+            targetAmp = k13ShortMax ? 1 : this.shortT < 0.19 ? 1 : Math.max(0, 1 - (this.shortT - 0.19) / 0.05);
             ampRate = targetAmp > this.amp ? this.kAmp : this.kAmpCut;
           } else {
             targetAmp = 1;
@@ -474,24 +826,35 @@
         }
 
         this.amp += (targetAmp - this.amp) * ampRate;
-        if (this.amp <= 0.005 && activeWant === '') {
+        if (this.amp <= 0.0004 && activeWant === '') {
           this.curSrcKey = '';
+          this.amp = 0;
         }
 
-        // Render exclusive active audio using genuine recorded WAVs
         let y = 0;
         if (this.amp > 1e-5 && this.curSrcKey !== '') {
-          const srcSpec = this.getSampleForKey(this.curSrcKey);
-          if (srcSpec && srcSpec.kind === 'clip') {
-            const entry = srcSpec.entry;
+          this.resolveSampleForKey(this.curSrcKey);
+          const sKind = this._specKind;
+          const entry = this._specEntry;
+          if (sKind === 'oneshot' && entry) {
+            const pcm = entry.pcm;
+            const limit = k13ShortMax > 0 ? k13ShortMax : pcm.length;
+            if (this.shortPos >= 0 && this.shortPos < limit) {
+              let env = 1;
+              const rem = limit - this.shortPos;
+              if (k13ShortFade > 0 && rem < k13ShortFade) {
+                env = rem / k13ShortFade;
+              }
+              y = pcm[this.shortPos] * this.amp * env;
+              this.shortPos++;
+            }
+            this.zcEstHz = 1380;
+          } else if (sKind === 'clip' && entry) {
             const pcm = entry.pcm;
             const ls = entry.ls || 0;
-            y = readSeamless(pcm, this.recPos, ls, srcSpec.xf) * this.amp;
-            const span = Math.max(1, pcm.length - ls);
-            this.recPos += 1;
-            if (this.recPos >= pcm.length) {
-              this.recPos = ls + ((this.recPos - pcm.length) % span);
-            }
+            const le = Math.min(pcm.length, entry.le || pcm.length);
+            y = readSeamless(pcm, this.recPos, ls, le, this._specXf) * this.amp;
+            this.recPos = advanceLoop(this.recPos, 1, ls, le, this._specXf);
             if (entry.track && entry.track.length > 0) {
               const idx = Math.floor((this.recPos / sr) / entry.step) % entry.track.length;
               this.zcEstHz = entry.track[idx];
@@ -507,40 +870,119 @@
               }
               this.zcLastSign = sign;
             }
-          } else if (srcSpec && srcSpec.kind === 'tone' && this.f > 40) {
-            const entry = srcSpec.entry;
+          } else if (sKind === 'tone' && entry && this.f > 40) {
             const pcm = entry.pcm;
+            const tLs = entry.ls || 0;
+            const tLe = Math.min(pcm.length, entry.le || pcm.length);
+            const tXf = tLe - tLs > 600 ? 96 : 48;
             const step = this.f / entry.hz;
-            y = readSeamless(pcm, this.tonePos, 0, 48) * this.amp;
-            this.tonePos += step;
-            if (this.tonePos >= pcm.length) {
-              this.tonePos %= pcm.length;
-            }
+            if (this.tonePos < tLs && tLs > 0 && tLe - tLs > 256) this.tonePos = tLs;
+            y = readSeamless(pcm, this.tonePos, tLs, tLe, tXf) * this.amp * melAccent;
+            this.tonePos = advanceLoop(this.tonePos, step, tLs, tLe, tXf);
             this.zcEstHz = this.f;
+          } else if (sKind === 'silver' && this.f > 40) {
+            this.driftT += dt;
+            const drift = isSilver && this.silverOpts.analog
+              ? 1 + 0.0055 * Math.sin(2 * Math.PI * 1.45 * this.driftT) + 0.002 * Math.sin(2 * Math.PI * 5.2 * this.driftT)
+              : 1;
+            const fInst = this.f * drift;
+            this.ph += fInst * dt;
+            if (this.ph >= 1) this.ph -= Math.floor(this.ph);
+            y = this.applyHornCabinet(readTbl(WAVE, this.ph)) * this.amp * melAccent;
+            this.zcEstHz = fInst;
           } else if (this.f > 40) {
             this.ph += this.f * dt;
             if (this.ph >= 1) this.ph -= Math.floor(this.ph);
-            y = readWave(this.ph) * this.amp;
+            y = this.applyHornCabinet(readTbl(WAVE, this.ph)) * this.amp * melAccent;
             this.zcEstHz = this.f;
           }
         }
 
-        // Authentic HORN (crossfade-looped real WAV recording, smoothly overrides siren)
+        // HORN:
+        // - Classic Hazard / Silver Hazard: real recorded horn.wav (fallback to HORN_WAVE before decode)
+        // - K-13: real recorded k13/horn.wav + k13/pulsar.wav + k13/tone.wav adapted to selected MODE
+        // - Elina / Grach: untouched genuine WAV clips
         this.hg += (hornT - this.hg) * (hornT > this.hg ? this.kHornOn : this.kHornOff);
-        if (this.hg > 1e-5 && hornEntry) {
-          const hPcm = hornEntry.pcm;
-          const hLs = hornEntry.ls || 0;
-          const hLe = Math.min(hPcm.length, hornEntry.le || hPcm.length);
-          const hSlice = hLe < hPcm.length ? hPcm.subarray(0, hLe) : hPcm;
-          const rawH = readSeamless(hSlice, this.hornPos, hLs, 480);
-          this.hornLp += (rawH - this.hornLp) * this.kHornLp;
-          const h = this.hornLp * 0.94;
-          const hSpan = Math.max(1, hLe - hLs);
-          this.hornPos += 1;
-          if (this.hornPos >= hLe) {
-            this.hornPos = hLs + ((this.hornPos - hLe) % hSpan);
+        if (this.hg > 1e-5) {
+          this.hornTapT += dt;
+          if (isSilver || this.sgu === 'hazard') {
+            if (hornEntry) {
+              const hPcm = hornEntry.pcm;
+              const hLs = hornEntry.ls || 0;
+              const hLe = Math.min(hPcm.length, hornEntry.le || hPcm.length);
+              const rawH = readSeamless(hPcm, this.hornPos, hLs, hLe, 320);
+              this.hornLp += (rawH - this.hornLp) * this.kHornLp;
+              const h = this.hornLp * 0.96;
+              this.hornModPh += 2.2 * dt;
+              if (this.hornModPh >= 1) this.hornModPh -= 1;
+              const mod = isSilver && this.silverOpts.analog ? 1 + 0.004 * Math.sin(2 * Math.PI * this.hornModPh) : 1;
+              this.hornPos = advanceLoop(this.hornPos, mod, hLs, hLe, 320);
+              y = y * (1 - this.hg) + h * this.hg;
+            } else {
+              this.hornModPh += 2.2 * dt;
+              if (this.hornModPh >= 1) this.hornModPh -= 1;
+              const mod = isSilver && this.silverOpts.analog ? 1 + 0.004 * Math.sin(2 * Math.PI * this.hornModPh) : 1;
+              this.hornPh += HORN_BASE_HZ * mod * dt;
+              if (this.hornPh >= 1) this.hornPh -= Math.floor(this.hornPh);
+              const h = this.applyHornCabinet(readTbl(HORN_WAVE, this.hornPh)) * 0.96;
+              y = y * (1 - this.hg) + h * this.hg;
+            }
+          } else if (isK13) {
+            const kpack = this.packRec.k13 || {};
+            const kMode = s.tone || s.selectedTone || 1;
+            if (kMode === 4 && kpack.pulsar) {
+              // K-13 PULSAR mode horn: genuine k13/pulsar.wav recording
+              const pEntry = kpack.pulsar;
+              const pPcm = pEntry.pcm;
+              const pLs = pEntry.ls || 0;
+              const pLe = Math.min(pPcm.length, pEntry.le || pPcm.length);
+              const h = readSeamless(pPcm, this.hornPos, pLs, pLe, 260) * 0.94;
+              this.hornPos = advanceLoop(this.hornPos, 1, pLs, pLe, 260);
+              y = y * (1 - this.hg) + h * this.hg;
+            } else if (hornEntry) {
+              // Genuine K-13 horn.wav recording (zero silence gap), pitch-reactive to MODE
+              const hPcm = hornEntry.pcm;
+              const hLs = hornEntry.ls || 0;
+              const hLe = Math.min(hPcm.length, hornEntry.le || hPcm.length);
+              const rawH = readSeamless(hPcm, this.hornPos, hLs, hLe, 160);
+              this.hornLp += (rawH - this.hornLp) * this.kHornLp;
+              const h = this.hornLp * 0.96;
+              let step = 1;
+              if (kMode === 2) {
+                const cPhase = (this.hornTapT % 0.16) / 0.16;
+                step = 0.96 + 0.26 * Math.sin(cPhase * Math.PI * 0.5);
+              } else if (kMode === 3) {
+                const flip = (this.hornStepIdx + Math.floor(this.hornTapT / 0.26)) % 2;
+                step = flip === 0 ? 0.94 : 1.22;
+              } else if (kMode === 5) {
+                const notes = this.melodyNotes && this.melodyNotes.length >= 2 ? this.melodyNotes : DEFAULT_MELODY_NOTES;
+                const stepIdx = (this.hornStepIdx + Math.floor(this.hornTapT / Math.max(0.08, this.melodyStepDur))) % notes.length;
+                step = Math.max(0.55, Math.min(1.65, notes[stepIdx] / 900));
+              }
+              this.hornPos = advanceLoop(this.hornPos, step, hLs, hLe, 160);
+              y = y * (1 - this.hg) + h * this.hg;
+            } else {
+              this.hornPh += K13_HORN_BASE_HZ * dt;
+              if (this.hornPh >= 1) this.hornPh -= Math.floor(this.hornPh);
+              const h = this.applyHornCabinet(readTbl(K13_HORN_WAVE, this.hornPh)) * 0.92;
+              y = y * (1 - this.hg) + h * this.hg;
+            }
+          } else if (hornEntry) {
+            // Elina / Grach untouched genuine WAV clips
+            const hPcm = hornEntry.pcm;
+            const hLs = hornEntry.ls || 0;
+            const hLe = Math.min(hPcm.length, hornEntry.le || hPcm.length);
+            const rawH = readSeamless(hPcm, this.hornPos, hLs, hLe, 420);
+            this.hornLp += (rawH - this.hornLp) * this.kHornLp;
+            const h = this.hornLp * 0.94;
+            this.hornPos = advanceLoop(this.hornPos, 1, hLs, hLe, 420);
+            y = y * (1 - this.hg) + h * this.hg;
+          } else {
+            this.hornPh += HORN_BASE_HZ * dt;
+            if (this.hornPh >= 1) this.hornPh -= Math.floor(this.hornPh);
+            const h = readTbl(HORN_WAVE, this.hornPh) * 0.92;
+            y = y * (1 - this.hg) + h * this.hg;
           }
-          y = y * (1 - this.hg) + h * this.hg;
         }
 
         if (this.wolfPos >= 0 && this.wolf) {
@@ -549,7 +991,7 @@
         }
 
         this.gm += (muteT - this.gm) * this.kMute;
-        y *= this.gm;
+        y *= this.gm * silverLevel;
         if (y > 0.96) y = 0.96;
         else if (y < -0.96) y = -0.96;
         out[i] = y;
@@ -560,13 +1002,15 @@
       this.statPeak = Math.max(this.statPeak, peak);
       this.statN += n;
       if (this.statN >= sr / 25 && this.onStat) {
-        const sounding = this.amp * this.gm > 0.05 && s.power;
+        const sounding = (this.amp > 0.05 || this.hg > 0.25) && this.gm > 0.05 && s.power;
         const outHz = this.hg > 0.5 ? 0 : sounding ? Math.round(this.zcEstHz || this.f) : 0;
         this.onStat({
           type: 'stat',
           f: outHz,
           horn: this.hg > 0.5,
+          klaxon: false,
           wolf: this.wolfPos >= 0,
+          sounding,
           lvl: this.statPeak,
           rec: this.useRec,
         });

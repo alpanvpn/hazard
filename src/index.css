@@ -38,10 +38,11 @@
 }
 
 /* SGU Hardware Accent Overrides */
-[data-sgu="hazard"] { --sgu-line: #e9be18; --sgu-label: #f4cc2a; }
-[data-sgu="k13"]    { --sgu-line: #f59e0b; --sgu-label: #fbbf24; }
-[data-sgu="elina"]  { --sgu-line: #38bdf8; --sgu-label: #7dd3fc; }
-[data-sgu="grach"]  { --sgu-line: #f87171; --sgu-label: #fca5a5; }
+[data-sgu="hazard"]        { --sgu-line: #e9be18; --sgu-label: #f4cc2a; }
+[data-sgu="hazard_silver"] { --sgu-line: #ff7a18; --sgu-label: #ff9a3c; }
+[data-sgu="k13"]           { --sgu-line: #f59e0b; --sgu-label: #fbbf24; }
+[data-sgu="elina"]         { --sgu-line: #38bdf8; --sgu-label: #7dd3fc; }
+[data-sgu="grach"]         { --sgu-line: #f87171; --sgu-label: #fca5a5; }
 
 * {
   box-sizing: border-box;
@@ -609,6 +610,306 @@ body.gated #app-shell {
   user-select: none;
 }
 
+/* ============================================================
+   Video 1: Hazard 7007 Silver Brushed-Metal Console
+   ============================================================ */
+.silver-chassis {
+  position: relative;
+  border-radius: 22px;
+  padding: 16px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.032) 0px,
+      rgba(255, 255, 255, 0.032) 1px,
+      rgba(0, 0, 0, 0.025) 1px,
+      rgba(0, 0, 0, 0.025) 2.5px
+    ),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.52) 0%, rgba(255, 255, 255, 0.08) 38%, rgba(0, 0, 0, 0.08) 100%),
+    linear-gradient(180deg, #cdd2db 0%, #b4bbc6 48%, #9ba3b0 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 20px 44px rgba(0, 0, 0, 0.72),
+    inset 0 2px 3px rgba(255, 255, 255, 0.85),
+    inset 0 -3px 6px rgba(30, 38, 52, 0.45);
+}
+
+:root[data-theme="glass"] .silver-chassis {
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.silver-lcd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 16px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #0b0d12 0%, #131720 100%);
+  border: 1.5px solid #2b313c;
+  box-shadow:
+    inset 0 3px 8px rgba(0, 0, 0, 0.9),
+    0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.dial.dial-silver {
+  background: #14171d;
+  box-shadow:
+    0 10px 20px rgba(0, 0, 0, 0.48),
+    0 2px 4px rgba(0, 0, 0, 0.4);
+}
+.dial.dial-silver .dial-knurl {
+  background: repeating-conic-gradient(
+    from -3deg,
+    #3b414f 0deg 8deg,
+    #14171f 8deg 20deg
+  );
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.dial.dial-silver .dial-cap {
+  background: radial-gradient(circle at 35% 28%, #353b47 0%, #1b1f27 60%, #0e1015 100%);
+}
+.dial.dial-silver .dial-needle {
+  background: #ff7a18;
+  box-shadow: 0 0 8px rgba(255, 122, 24, 0.75);
+}
+
+.silver-mode-pill {
+  position: absolute;
+  border: 0;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #262c36;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease, transform 0.06s ease;
+}
+.silver-mode-pill:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+.silver-mode-pill.active {
+  background: #11141a;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.42);
+}
+
+.silver-well-btn {
+  min-height: 54px;
+  border-radius: 14px;
+  border: 2px solid #2b303a;
+  border-bottom: 4px solid #090b0e;
+  background: linear-gradient(180deg, #21252f 0%, #14171e 55%, #0e1015 100%);
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15.5px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  padding: 0 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.11),
+    0 4px 10px rgba(0, 0, 0, 0.4),
+    0 0 0 3px rgba(56, 64, 78, 0.28);
+  transition: transform 0.06s ease, box-shadow 0.1s ease, background 0.1s ease;
+  touch-action: manipulation;
+}
+.silver-well-btn:active,
+.silver-well-btn.pressed {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+.silver-well-btn.lit-amber {
+  background: linear-gradient(180deg, #543710 0%, #3a2409 100%);
+  border-color: #ff922b;
+  color: #ffd8a8;
+  box-shadow:
+    0 0 18px rgba(255, 146, 43, 0.52),
+    inset 0 1px 4px rgba(255, 210, 140, 0.35);
+}
+.silver-well-btn.lit-red {
+  background: linear-gradient(180deg, #59161c 0%, #380c10 100%);
+  border-color: #ff4d4f;
+  color: #ffe4e6;
+  box-shadow: 0 0 18px rgba(255, 77, 79, 0.52);
+}
+.silver-well-btn.lit-green {
+  background: linear-gradient(180deg, #10492b 0%, #092c19 100%);
+  border-color: #38d97c;
+  color: #d1fae5;
+  box-shadow: 0 0 18px rgba(56, 217, 124, 0.48);
+}
+.silver-well-btn.lit-blue {
+  background: linear-gradient(180deg, #163669 0%, #0d2142 100%);
+  border-color: #3b82f6;
+  color: #dbeafe;
+  box-shadow: 0 0 18px rgba(59, 130, 246, 0.5);
+}
+
+.silver-seg-track {
+  background: #14171e;
+  border-radius: 10px;
+  padding: 3.5px;
+  border: 1px solid #2b303a;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.72);
+}
+.silver-seg-btn {
+  min-height: 35px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(244, 246, 249, 0.72);
+  font-family: "Manrope", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+  white-space: nowrap;
+  padding: 4px 8px;
+}
+.silver-seg-btn.active-cyan {
+  background: #1c2d36;
+  border-color: #38bdf8;
+  color: #e0f2fe;
+}
+.silver-seg-btn.active-slate {
+  background: #282d38;
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+}
+.silver-seg-btn.active-amber {
+  background: #3d280d;
+  border-color: #ff7a18;
+  color: #fed7aa;
+}
+
+/* ============================================================
+   Video 2: Authentic Matte Black K-13 Handheld Console
+   ============================================================ */
+.k13-physical-body {
+  border-radius: 14px;
+  padding: 14px 12px 12px;
+  background:
+    radial-gradient(ellipse 90% 45% at 50% 0%, rgba(255, 255, 255, 0.05) 0%, transparent 65%),
+    linear-gradient(175deg, #21242b 0%, #17191f 55%, #101216 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 18px 36px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.8);
+}
+
+.k13-wordmark {
+  font-size: 26px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #f3f4f6;
+  font-style: normal;
+  transform: skewX(-4deg);
+}
+
+.k13-micro-lbl {
+  display: block;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(244, 246, 249, 0.92);
+  line-height: 1.1;
+}
+
+.k13-recessed-btn {
+  width: 66px;
+  height: 62px;
+  border-radius: 8px;
+  border: 1.5px solid #2b2f38;
+  border-bottom: 4px solid #060709;
+  background: linear-gradient(180deg, #1b1e24 0%, #111318 65%, #0b0c10 100%);
+  box-shadow:
+    0 5px 10px rgba(0, 0, 0, 0.72),
+    0 0 0 3px #0a0b0e,
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  position: relative;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 7px;
+  transition: transform 0.06s ease, border-bottom-width 0.06s ease, background 0.1s ease;
+  touch-action: manipulation;
+}
+.k13-recessed-btn:active,
+.k13-recessed-btn.is-pressed {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+  background: linear-gradient(180deg, #232730 0%, #15181e 100%);
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.85),
+    0 0 0 3px #0a0b0e,
+    inset 0 2px 4px rgba(0, 0, 0, 0.45);
+}
+
+.k13-thin-led {
+  width: 22px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  transition: background 0.1s ease, box-shadow 0.1s ease;
+}
+.k13-thin-led.led-amber {
+  background: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+}
+.k13-thin-led.led-red {
+  background: #fb7185;
+  box-shadow: 0 0 8px #fb7185;
+}
+.k13-thin-led.led-green {
+  background: #34d399;
+  box-shadow: 0 0 8px #34d399;
+}
+
+.k13-round-metal {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid #9ca3af;
+  background: radial-gradient(circle at 35% 30%, #e5e7eb 0%, #6b7280 55%, #272b33 100%);
+  box-shadow:
+    0 4px 8px rgba(0, 0, 0, 0.78),
+    inset 0 1px 2px rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.06s ease, box-shadow 0.1s ease;
+  touch-action: manipulation;
+}
+.k13-round-metal:active,
+.k13-round-metal.is-pressed {
+  transform: scale(0.93);
+  border-color: #f59e0b;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.65);
+}
+.k13-round-core {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #14171d;
+  border: 1.5px solid #4b5563;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.9);
+}
+
 @media (max-width: 390px) {
   .sgu-chassis { padding: 8px; }
   .sgu-inner-frame { padding: 8px 7px 8px; }
@@ -621,4 +922,5 @@ body.gated #app-shell {
   .arc-mode-btn { font-size: 10.5px; padding: 3px 4px; }
   .hw-white-key { height: 66px; }
   .k13-key { min-height: 62px; }
+  .k13-recessed-btn { width: 56px; height: 54px; }
 }

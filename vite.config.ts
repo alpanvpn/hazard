@@ -25,6 +25,7 @@ export default defineConfig(() => {
           'sounds/*.wav',
           'sounds/elina/*.wav',
           'sounds/grach/*.wav',
+          'sounds/k13/*.wav',
           'sounds/phrases/*.mp3',
         ],
         manifest: {

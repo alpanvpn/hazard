@@ -40,6 +40,10 @@ const wavNames = [
   'grach/phaser',
   'grach/horn',
   'grach/tone',
+  'k13/horn',
+  'k13/pulsar',
+  'k13/short',
+  'k13/tone',
 ];
 const wavBase64 = {};
 for (const name of wavNames) {

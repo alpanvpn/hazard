@@ -9,6 +9,7 @@ interface RotaryKnobProps {
   onChange: (nextVal: number) => void;
   ariaLabel: string;
   displayText?: string;
+  variant?: 'dark' | 'silver';
 }
 
 export const RotaryKnob: React.FC<RotaryKnobProps> = ({
@@ -20,6 +21,7 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
   onChange,
   ariaLabel,
   displayText,
+  variant = 'dark',
 }) => {
   const dialRef = useRef<HTMLDivElement | null>(null);
   const activePointerId = useRef<number | null>(null);
@@ -147,7 +149,9 @@ export const RotaryKnob: React.FC<RotaryKnobProps> = ({
         onPointerCancel={onPointerEnd}
         onLostPointerCapture={onPointerEnd}
         onKeyDown={onKeyDown}
-        className={`dial ${isSmall ? 'dial-sm' : 'dial-lg'}`}
+        className={`dial ${isSmall ? 'dial-sm' : 'dial-lg'} ${
+          variant === 'silver' ? 'dial-silver' : ''
+        }`}
       >
         <div className="dial-knurl" aria-hidden="true" />
         <div className="dial-cap" aria-hidden="true" />

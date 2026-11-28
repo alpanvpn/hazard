@@ -5,7 +5,8 @@ export type SirenMode =
   | 'wail'
   | 'pa'
   | 'radio'
-  | 'phaser';
+  | 'phaser'
+  | 'melody';
 
 // Numeric tone codes matching HazardSynth inside public/hazard-worklet.js
 const TONE_CODE: Record<SirenMode, number> = {
@@ -16,6 +17,7 @@ const TONE_CODE: Record<SirenMode, number> = {
   yelp: 2,
   hilo: 3,
   phaser: 4,
+  melody: 5,
 };
 
 export type PhraseId =
@@ -25,6 +27,8 @@ export type PhraseId =
   | 'strelyat'
   | 'ostanavlivaemsya';
 
+export type SilverSpeaker = 'hazard' | 'bell' | 'mid';
+
 export interface EngineSnapshot {
   powered: boolean;
   mode: SirenMode;
@@ -32,6 +36,7 @@ export interface EngineSnapshot {
   hz: number;
   hornActive: boolean;
   wolfActive: boolean;
+  sounding: boolean;
   loadedCount: number;
   totalCount: number;
   audioState: AudioContextState | 'uninitialized' | 'interrupted';
@@ -43,6 +48,7 @@ export interface EngineSnapshot {
 
 interface MetaEntry {
   loopStart?: number;
+  loopEnd?: number;
   track?: number[];
   trackStep?: number;
   hz?: number;
@@ -115,7 +121,7 @@ export class SirenAudioEngine {
   private startPromise: Promise<void> | null = null;
   private ready = false;
   private loadedCount = 0;
-  private readonly totalCount = 16;
+  private readonly totalCount = 20;
 
   private powered = false;
   private mode: SirenMode = 'standby';
@@ -135,11 +141,21 @@ export class SirenAudioEngine {
   private toneFreq = 4600;
   private micDb = 18;
   private sessionType: 'ambient' | 'playback' = 'playback';
-  private sguSystem: 'hazard' | 'k13' | 'elina' | 'grach' = 'hazard';
+  private sguSystem: 'hazard' | 'hazard_silver' | 'k13' | 'elina' | 'grach' = 'hazard';
+  private k13SelectedMode: SirenMode = 'wail';
+  private silverSpeaker: SilverSpeaker = 'hazard';
+  private silverAnalog = false;
+  private silverPower = 72;
+  private melodyNotes: number[] = [600, 1700];
+  private melodyStepMs = 3000;
+  private melodySharp = false;
+  private melodyIsSweep = true;
+  private lastClickAt = 0;
 
   private currentHz = 0;
   private currentHorn = false;
   private currentWolf = false;
+  private currentSounding = false;
 
   private phraseBuffers = new Map<PhraseId, AudioBuffer>();
   private phraseSrc: AudioBufferSourceNode | null = null;
@@ -151,12 +167,13 @@ export class SirenAudioEngine {
     name: string;
     pcm: Float32Array;
     loopStart: number;
+    loopEnd?: number;
     track?: number[];
     step?: number;
     hz?: number;
   }> = [];
   private packSampleCache: Array<{
-    pack: 'elina' | 'grach';
+    pack: 'elina' | 'grach' | 'k13';
     name: string;
     pcm: Float32Array;
     loopStart: number;
@@ -165,6 +182,11 @@ export class SirenAudioEngine {
   }> = [];
   private wolfCache: Float32Array | null = null;
   private workletStatSeen = false;
+  private hornPressAt = 0;
+  private hornReleaseTimer: number | null = null;
+  private wantPtt = false;
+  private micAuthPromise: Promise<boolean> | null = null;
+  public lastMicError = '';
 
   private onStateChange?: (snap: EngineSnapshot) => void;
   private onTelemetry?: (hz: number, level: number) => void;
@@ -241,6 +263,10 @@ export class SirenAudioEngine {
       'grach/phaser',
       'grach/horn',
       'grach/tone',
+      'k13/horn',
+      'k13/pulsar',
+      'k13/short',
+      'k13/tone',
     ] as const;
     const phraseUrls = [
       'sounds/phrases/obochina.mp3',
@@ -367,13 +393,14 @@ export class SirenAudioEngine {
     this.analyser.fftSize = 2048;
     this.analyser.smoothingTimeConstant = 0.3;
 
-    // Soft, damped 7ms tactile relay thump (no harsh static white noise ticks)
-    const cLen = Math.max(64, Math.floor(ctx.sampleRate * 0.007));
+    // Subtle raised-cosine micro-tick (no low-frequency 165 Hz thud / knock)
+    const cLen = Math.max(64, Math.floor(ctx.sampleRate * 0.004));
     const cBuf = ctx.createBuffer(1, cLen, ctx.sampleRate);
     const cData = cBuf.getChannelData(0);
     for (let i = 0; i < cLen; i++) {
       const t = i / ctx.sampleRate;
-      cData[i] = Math.sin(2 * Math.PI * 165 * t) * Math.exp(-t / 0.0018) * 0.24;
+      const win = Math.sin((Math.PI * i) / (cLen - 1));
+      cData[i] = Math.sin(2 * Math.PI * 1900 * t) * Math.exp(-t / 0.0011) * win * 0.055;
     }
     this.clickBuffer = cBuf;
 
@@ -472,6 +499,7 @@ export class SirenAudioEngine {
           name: item.name,
           pcm: copy,
           loopStart: item.loopStart,
+          loopEnd: item.loopEnd,
           track: item.track,
           step: item.step,
           hz: item.hz,
@@ -498,6 +526,19 @@ export class SirenAudioEngine {
       const wCopy = new Float32Array(this.wolfCache);
       this.sendFn({ type: 'wolfData', pcm: wCopy }, [wCopy.buffer]);
     }
+    this.sendFn({
+      type: 'silverOpts',
+      speaker: this.silverSpeaker,
+      analog: this.silverAnalog,
+      powerLevel: this.silverPower,
+    });
+    this.sendFn({
+      type: 'melodyConfig',
+      notes: this.melodyNotes,
+      stepMs: this.melodyStepMs,
+      sharp: this.melodySharp,
+      isSweep: this.melodyIsSweep,
+    });
     this.pushState();
   }
 
@@ -547,6 +588,19 @@ export class SirenAudioEngine {
 
     this.ready = true;
     this.sendFn?.({ type: 'sgu', id: this.sguSystem });
+    this.sendFn?.({
+      type: 'silverOpts',
+      speaker: this.silverSpeaker,
+      analog: this.silverAnalog,
+      powerLevel: this.silverPower,
+    });
+    this.sendFn?.({
+      type: 'melodyConfig',
+      notes: this.melodyNotes,
+      stepMs: this.melodyStepMs,
+      sharp: this.melodySharp,
+      isSweep: this.melodyIsSweep,
+    });
     await this.loadHazardSamples();
     this.pushState();
     if (ctx.state !== 'running') {
@@ -555,22 +609,30 @@ export class SirenAudioEngine {
     this.emit();
 
     if (usingWorklet && typeof window !== 'undefined') {
-      window.setTimeout(async () => {
+      const verifyWorklet = () => {
         if (this.workletStatSeen || !this.ctx || !this.toneFilter) return;
-        try {
-          if (this.workletNode) {
-            this.workletNode.disconnect();
-          }
-          const sp = await this.createScriptProcessorNode(this.ctx, inline);
-          if (sp) {
-            sp.connect(this.toneFilter);
-            this.workletNode = sp;
-            this.replayCachedSamples();
-          }
-        } catch {
-          // Ignore fallback errors
+        if (this.ctx.state !== 'running') {
+          window.setTimeout(verifyWorklet, 1200);
+          return;
         }
-      }, 500);
+        window.setTimeout(async () => {
+          if (this.workletStatSeen || !this.ctx || !this.toneFilter || this.ctx.state !== 'running') return;
+          try {
+            if (this.workletNode) {
+              this.workletNode.disconnect();
+            }
+            const sp = await this.createScriptProcessorNode(this.ctx, inline);
+            if (sp) {
+              sp.connect(this.toneFilter);
+              this.workletNode = sp;
+              this.replayCachedSamples();
+            }
+          } catch {
+            // Ignore fallback errors
+          }
+        }, 1200);
+      };
+      window.setTimeout(verifyWorklet, 1800);
     }
   }
 
@@ -605,6 +667,7 @@ export class SirenAudioEngine {
               name,
               pcm: pcmCache,
               loopStart: m.loopStart || 0,
+              loopEnd: m.loopEnd,
               track: m.track,
               step: m.trackStep,
               hz: m.hz,
@@ -615,6 +678,7 @@ export class SirenAudioEngine {
                 name,
                 pcm: pcmTransfer,
                 loopStart: m.loopStart || 0,
+                loopEnd: m.loopEnd,
                 track: m.track,
                 step: m.trackStep,
                 hz: m.hz,
@@ -654,7 +718,7 @@ export class SirenAudioEngine {
       };
 
       const packSpecs: Array<{
-        pack: 'elina' | 'grach';
+        pack: 'elina' | 'grach' | 'k13';
         name: string;
         loopStart: number;
         loopEnd?: number;
@@ -670,6 +734,10 @@ export class SirenAudioEngine {
         { pack: 'grach', name: 'phaser', loopStart: 0 },
         { pack: 'grach', name: 'horn', loopStart: 0.12, loopEnd: 1.05 },
         { pack: 'grach', name: 'tone', loopStart: 0, hz: 1329.99 },
+        { pack: 'k13', name: 'horn', loopStart: 0.02633, loopEnd: 0.06306 },
+        { pack: 'k13', name: 'pulsar', loopStart: 0 },
+        { pack: 'k13', name: 'short', loopStart: 0 },
+        { pack: 'k13', name: 'tone', loopStart: 0.01499, loopEnd: 0.04524, hz: 1387.51 },
       ];
 
       const loadPacks = Promise.all(
@@ -730,18 +798,73 @@ export class SirenAudioEngine {
     const f = typeof m.f === 'number' ? m.f : 0;
     const horn = Boolean(m.horn);
     const wolf = Boolean(m.wolf);
+    const sounding = Boolean(m.sounding);
     this.currentHz = f;
     this.onTelemetry?.(this.powered ? f : 0, this.getMeterLevel());
-    if (horn !== this.currentHorn || wolf !== this.currentWolf) {
+    if (
+      horn !== this.currentHorn ||
+      wolf !== this.currentWolf ||
+      sounding !== this.currentSounding
+    ) {
       this.currentHorn = horn;
       this.currentWolf = wolf;
+      this.currentSounding = sounding;
       this.emit();
     }
   }
 
-  public setSguSystem(id: 'hazard' | 'k13' | 'elina' | 'grach') {
+  public setSguSystem(id: 'hazard' | 'hazard_silver' | 'k13' | 'elina' | 'grach') {
     this.sguSystem = id;
     this.sendFn?.({ type: 'sgu', id });
+  }
+
+  public setK13SelectedMode(mode: SirenMode) {
+    this.k13SelectedMode = mode;
+    this.pushState();
+  }
+
+  public setSilverSpeaker(speaker: SilverSpeaker) {
+    this.silverSpeaker = speaker;
+    this.sendFn?.({ type: 'silverOpts', speaker });
+  }
+
+  public setSilverAnalog(analog: boolean) {
+    this.silverAnalog = analog;
+    this.sendFn?.({ type: 'silverOpts', analog });
+  }
+
+  public setSilverPower(powerLevel: number) {
+    this.silverPower = Math.max(0, Math.min(100, powerLevel));
+    this.sendFn?.({ type: 'silverOpts', powerLevel: this.silverPower });
+  }
+
+  public setMelodyConfig(cfg: {
+    notes?: number[];
+    stepMs?: number;
+    sharp?: boolean;
+    isSweep?: boolean;
+  }) {
+    if (Array.isArray(cfg.notes) && cfg.notes.length >= 2) {
+      this.melodyNotes = cfg.notes
+        .slice(0, 12)
+        .map((n) => Math.max(200, Math.min(2600, Math.round(n))));
+    }
+    if (typeof cfg.stepMs === 'number' && Number.isFinite(cfg.stepMs)) {
+      this.melodyStepMs = Math.max(60, Math.min(3500, Math.round(cfg.stepMs)));
+    }
+    if (typeof cfg.sharp === 'boolean') {
+      this.melodySharp = cfg.sharp;
+    }
+    if (typeof cfg.isSweep === 'boolean') {
+      this.melodyIsSweep = cfg.isSweep;
+    }
+    this.sendFn?.({
+      type: 'melodyConfig',
+      notes: this.melodyNotes,
+      stepMs: this.melodyStepMs,
+      sharp: this.melodySharp,
+      isSweep: this.melodyIsSweep,
+    });
   }
 
   public async ensureAudioBus(): Promise<{ ctx: AudioContext; destination: AudioNode } | null> {
@@ -790,6 +913,7 @@ export class SirenAudioEngine {
       if (this.mode === 'yelp') return TONE_CODE.phaser;
       if (this.mode === 'wail') return TONE_CODE.yelp;
       if (this.mode === 'phaser') return TONE_CODE.yelp;
+      if (this.mode === 'melody') return TONE_CODE.yelp;
     }
     return TONE_CODE[this.mode] || 0;
   }
@@ -817,6 +941,7 @@ export class SirenAudioEngine {
       s: {
         power: this.powered,
         tone: this.getEffectiveTone(),
+        selectedTone: TONE_CODE[this.k13SelectedMode] || 1,
         horn: this.hornHeld,
         mute,
         man: role === 'wolf' ? 'off' : role,
@@ -828,7 +953,9 @@ export class SirenAudioEngine {
     if (this.ctx && this.radioGate) {
       this.ramp(
         this.radioGate.gain,
-        this.powered && this.mode === 'radio' && !mute && !this.hornHeld && !manSounds ? 1 : 0,
+        this.powered && this.mode === 'radio' && !mute && !this.hornHeld && !manSounds
+          ? 1
+          : 0,
         0.06
       );
     }
@@ -849,10 +976,13 @@ export class SirenAudioEngine {
 
   public playClick(strong = false): void {
     if (!this.beepEnabled || !this.ctx || !this.masterGain || !this.clickBuffer) return;
+    const now = performance.now();
+    if (now - this.lastClickAt < 75) return;
+    this.lastClickAt = now;
     const src = this.ctx.createBufferSource();
     src.buffer = this.clickBuffer;
     const g = this.ctx.createGain();
-    g.gain.value = strong ? 0.22 : 0.14;
+    g.gain.value = strong ? 0.14 : 0.08;
     src.connect(g);
     g.connect(this.masterGain);
     src.start(0);
@@ -862,9 +992,14 @@ export class SirenAudioEngine {
     this.powered = on;
     this.altActive = false;
     if (!on) {
+      if (this.hornReleaseTimer !== null) {
+        window.clearTimeout(this.hornReleaseTimer);
+        this.hornReleaseTimer = null;
+      }
       this.hornHeld = false;
       this.manHeld = false;
       this.pulsarHeld = false;
+      this.wantPtt = false;
       this.pttHeld = false;
       this.mode = 'standby';
       this.stopPhrase(true);
@@ -939,7 +1074,13 @@ export class SirenAudioEngine {
 
   public async pressHorn(): Promise<void> {
     if (!this.powered) this.powered = true;
+    if (this.hornReleaseTimer !== null) {
+      window.clearTimeout(this.hornReleaseTimer);
+      this.hornReleaseTimer = null;
+    }
+    this.hornPressAt = performance.now();
     this.hornHeld = true;
+    this.sendFn?.({ type: 'hornTap' });
     this.pushState();
     this.emit();
     await this.ensureStarted();
@@ -949,53 +1090,98 @@ export class SirenAudioEngine {
 
   public releaseHorn(): void {
     if (!this.hornHeld) return;
+    const elapsed = performance.now() - this.hornPressAt;
+    const minPulseMs = 30;
+    if (elapsed < minPulseMs) {
+      if (this.hornReleaseTimer !== null) {
+        window.clearTimeout(this.hornReleaseTimer);
+      }
+      this.hornReleaseTimer = window.setTimeout(() => {
+        this.hornReleaseTimer = null;
+        this.hornHeld = false;
+        this.pushState();
+        this.emit();
+      }, minPulseMs - elapsed);
+      return;
+    }
     this.hornHeld = false;
     this.pushState();
     this.emit();
   }
 
-  public async startMic(): Promise<boolean> {
-    await this.ensureStarted();
-    if (!navigator.mediaDevices?.getUserMedia || !this.ctx || !this.masterGain) return false;
-    try {
-      if (!this.micStream) {
-        this.micStream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            channelCount: { ideal: 1 },
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-          },
-          video: false,
-        });
-        const src = this.ctx.createMediaStreamSource(this.micStream);
+  private describeMicError(err: unknown): string {
+    const name = (err as { name?: string } | null)?.name || '';
+    if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || name === 'SecurityError') {
+      return 'Доступ к микрофону запрещён — разрешите микрофон в настройках сайта или откройте страницу отдельно.';
+    }
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+      return 'Микрофон не найден на этом устройстве.';
+    }
+    if (name === 'NotReadableError' || name === 'TrackStartError') {
+      return 'Микрофон занят другим приложением.';
+    }
+    return 'Не удалось включить микрофон — проверьте разрешения браузера.';
+  }
+
+  public async authorizeMic(): Promise<boolean> {
+    if (this.micStream) {
+      const liveTrack = this.micStream.getAudioTracks().some((t) => t.readyState === 'live');
+      if (liveTrack) return true;
+      this.disableMic();
+    }
+    if (this.micAuthPromise) {
+      return this.micAuthPromise;
+    }
+    this.micAuthPromise = (async () => {
+      try {
+        await this.ensureStarted();
+        if (!navigator.mediaDevices?.getUserMedia || !this.ctx || !this.masterGain) {
+          this.lastMicError = 'Браузер не поддерживает запись с микрофона в текущем окне.';
+          return false;
+        }
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              channelCount: { ideal: 1 },
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+            video: false,
+          });
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        }
+        this.micStream = stream;
+        const src = this.ctx.createMediaStreamSource(stream);
         const hp = this.ctx.createBiquadFilter();
         hp.type = 'highpass';
-        hp.frequency.value = 320;
-        hp.Q.value = 0.9;
+        hp.frequency.value = 260;
+        hp.Q.value = 0.85;
         const pres = this.ctx.createBiquadFilter();
         pres.type = 'peaking';
-        pres.frequency.value = 2200;
-        pres.Q.value = 0.9;
-        pres.gain.value = 6;
+        pres.frequency.value = 2100;
+        pres.Q.value = 0.85;
+        pres.gain.value = 4.5;
         const lp = this.ctx.createBiquadFilter();
         lp.type = 'lowpass';
-        lp.frequency.value = 4200;
+        lp.frequency.value = 3800;
         lp.Q.value = 0.8;
 
         this.micGain = this.ctx.createGain();
-        this.micGain.gain.value = Math.pow(10, this.micDb / 20);
+        this.micGain.gain.value = Math.pow(10, Math.min(24, this.micDb) / 20);
 
         const comp = this.ctx.createDynamicsCompressor();
-        comp.threshold.value = -18;
-        comp.knee.value = 6;
-        comp.ratio.value = 12;
+        comp.threshold.value = -20;
+        comp.knee.value = 8;
+        comp.ratio.value = 8;
 
         this.micGate = this.ctx.createGain();
         this.micGate.gain.value = 0;
 
         const out = this.ctx.createGain();
-        out.gain.value = 1.3;
+        out.gain.value = 0.95;
 
         src.connect(hp);
         hp.connect(pres);
@@ -1010,23 +1196,51 @@ export class SirenAudioEngine {
         this.micAnalyser.fftSize = 256;
         src.connect(this.micAnalyser);
         this.micNodes = [src, hp, pres, lp, this.micGain, comp, this.micGate, out];
+        this.lastMicError = '';
+        this.emit();
+        return true;
+      } catch (err) {
+        this.lastMicError = this.describeMicError(err);
+        return false;
+      } finally {
+        this.micAuthPromise = null;
       }
-      this.pttHeld = true;
+    })();
+    return this.micAuthPromise;
+  }
+
+  public async startMic(): Promise<boolean> {
+    this.wantPtt = true;
+    const ok = await this.authorizeMic();
+    if (!ok) {
+      this.wantPtt = false;
+      this.pttHeld = false;
+      this.pushState();
+      this.emit();
+      return false;
+    }
+    if (!this.wantPtt) {
+      // User already released button while permission dialog was open
+      this.pttHeld = false;
       this.pushState();
       this.emit();
       return true;
-    } catch {
-      return false;
     }
+    this.pttHeld = true;
+    this.pushState();
+    this.emit();
+    return true;
   }
 
   public stopMic(): void {
+    this.wantPtt = false;
     this.pttHeld = false;
     this.pushState();
     this.emit();
   }
 
   public disableMic(): void {
+    this.wantPtt = false;
     this.pttHeld = false;
     if (this.micStream) {
       this.micStream.getTracks().forEach((t) => t.stop());
@@ -1190,7 +1404,12 @@ export class SirenAudioEngine {
     this.altActive = false;
     this.manHeld = false;
     this.pulsarHeld = false;
+    if (this.hornReleaseTimer !== null) {
+      window.clearTimeout(this.hornReleaseTimer);
+      this.hornReleaseTimer = null;
+    }
     this.hornHeld = false;
+    this.wantPtt = false;
     this.pttHeld = false;
     this.stopPhrase(true);
     this.sendFn?.({ type: 'wolfStop' });
@@ -1281,6 +1500,7 @@ export class SirenAudioEngine {
       hz: this.powered ? this.currentHz : 0,
       hornActive: this.currentHorn,
       wolfActive: this.currentWolf,
+      sounding: this.powered && this.currentSounding,
       loadedCount: this.loadedCount,
       totalCount: this.totalCount,
       audioState: this.ctx ? (this.ctx.state as EngineSnapshot['audioState']) : 'uninitialized',
